@@ -22,10 +22,10 @@ class JmSettings extends StatefulWidget {
   State<JmSettings> createState() => _JmSettingsState();
 
   static const builtInApiDomains = <String>[
-    "www.cdnaspa.vip",
-    "www.cdnaspa.club",
-    "www.cdnplaystation6.vip",
-    "www.cdnplaystation6.cc"
+    "www.cdntwice.org",
+    "www.cdnsha.org",
+    "www.cdnaspa.cc",
+    "www.cdnntr.cc"
   ];
 
   static void updateApiDomains([bool showLoading = false]) async {
@@ -36,9 +36,6 @@ class JmSettings extends StatefulWidget {
     var res = await JmNetwork().getApiDomains();
     if (res.error) {
       title += "更新失败".tl;
-      if (res.errorMessage!.isNum) {
-        title += ": ${res.errorMessage!}";
-      }
       msg += "${"使用内置域名:".tl}\n";
     } else {
       title += "更新成功".tl;
