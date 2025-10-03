@@ -137,6 +137,36 @@ class JmNetwork {
     loginFromAppdata();
   }
 
+  Future<Res<dynamic>> getAppVersionCode() async {
+    var dio = logDio(
+        BaseOptions(
+          headers: {
+            ...getBaseHeaders(),
+            "Accept-Encoding": "gzip",
+            "user-agent": ua,
+          },
+        )
+    );
+    try {
+      var res = await dio.get("$baseUrl/static/jmapp3apk/version.json");
+      try {
+        String version = res.data['version'];
+        if (version.isNotEmpty) {
+          return Res(version);
+        } else {
+          return const Res.error("No version code in response.");
+        }
+      } catch (e) {
+        return Res(null, errorMessage: e.toString());
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print(e);
+      }
+      return Res(null, errorMessage: e.toString());
+    }
+  }
+
   Future<List<String>> tryFetchAndDecrypt(String url) async {
     var dio = Dio(
         BaseOptions(
