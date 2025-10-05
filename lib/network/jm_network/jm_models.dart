@@ -105,6 +105,8 @@ class JmComicInfo with HistoryMixin {
   ///章节信息, 键为章节序号, 值为漫画ID
   Map<int, String> series;
   List<String> tags;
+  List<String> works;
+  List<String> actors;
   List<JmComicBrief> relatedComics;
   bool liked;
   bool favorite;
@@ -119,6 +121,8 @@ class JmComicInfo with HistoryMixin {
       this.views,
       this.series,
       this.tags,
+      this.works,
+      this.actors,
       this.relatedComics,
       this.liked,
       this.favorite,
@@ -151,6 +155,8 @@ class JmComicInfo with HistoryMixin {
       "views": "",
       "series": seriesToJsonMap(series),
       "tags": tags,
+      "works": works,
+      "actors": actors,
       "relatedComics": [],
       "liked": "",
       "favorite": "",
@@ -167,6 +173,8 @@ class JmComicInfo with HistoryMixin {
         views = 0,
         series = jsonMapToSeries(map["series"]),
         tags = List<String>.from(map["tags"]),
+        works = List<String>.from(map["works"]),
+        actors = List<String>.from(map["actors"]),
         relatedComics = [],
         liked = false,
         favorite = false,
