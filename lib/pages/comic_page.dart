@@ -669,6 +669,7 @@ class ComicPageLogic<T extends Object> extends StateController {
   bool showFullEps = false;
   int colorIndex = 0;
   bool? favoriteOnPlatform;
+  bool serverDownloaded = false;
 
   void get(Future<Res<T>> Function() loadData,
       Future<bool> Function(T) loadFavorite, String Function() getId) async {
@@ -683,10 +684,31 @@ class ComicPageLogic<T extends Object> extends StateController {
     } else {
       data = res.data;
       favorite = await loadFavorite(res.data);
+      // 检查服务器是否已下载
+      await _checkServerDownload(getId);
     }
     loading = false;
     history = await HistoryManager().find(getId());
     update();
+  }
+  
+  Future<void> _checkServerDownload(String Function() getId) async {
+    final serverUrl = appdata.settings[90];
+    if (serverUrl == null || serverUrl.isEmpty) {
+      serverDownloaded = false;
+      return;
+    }
+    
+    try {
+      final client = ServerClient(serverUrl);
+      final response = await client.getComics();
+      final comicId = getId();
+      
+      // 检查服务器漫画列表中是否有这个 ID
+      serverDownloaded = response.comics.any((comic) => comic.id == comicId);
+    } catch (e) {
+      serverDownloaded = false;
+    }
   }
 
   void refresh_() {
@@ -1372,6 +1394,33 @@ abstract class BaseComicPage<T extends Object> extends StatelessWidget {
                         ),
                         Text(
                           "删除下载".tl,
+                          style: const TextStyle(fontSize: 12),
+                        )
+                      ],
+                    ),
+                  ),
+                ),
+              if (logic.serverDownloaded)
+                Tooltip(
+                  message: "服务器已下载".tl,
+                  child: SizedBox(
+                    height: 72,
+                    width: 64,
+                    child: Column(
+                      children: [
+                        const SizedBox(
+                          height: 12,
+                        ),
+                        Icon(
+                          Icons.cloud_done,
+                          size: 24,
+                          color: Colors.green,
+                        ),
+                        const SizedBox(
+                          height: 8,
+                        ),
+                        Text(
+                          "服务器".tl,
                           style: const TextStyle(fontSize: 12),
                         )
                       ],
