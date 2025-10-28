@@ -40,6 +40,8 @@ import '../../tools/background_service.dart';
 import '../../tools/debug.dart';
 import '../welcome_page.dart';
 import 'package:pica_comic/tools/translations.dart';
+import '../server_settings_page.dart';
+import '../server_comics_page.dart';
 
 part "reading_settings.dart";
 part "picacg_settings.dart";
@@ -77,7 +79,7 @@ class _SettingsPageState extends State<SettingsPage> implements PopEntry{
 
   bool get enableTwoViews => !UiMode.m1(context);
 
-  final categories = <String>["浏览", "漫画源", "阅读", "外观", "本地收藏", "APP", "网络", "关于"];
+  final categories = <String>["浏览", "漫画源", "阅读", "外观", "本地收藏", "服务器", "APP", "网络", "关于"];
 
   final icons = <IconData>[
     Icons.explore,
@@ -85,6 +87,7 @@ class _SettingsPageState extends State<SettingsPage> implements PopEntry{
     Icons.book,
     Icons.color_lens,
     Icons.collections_bookmark_rounded,
+    Icons.cloud,
     Icons.apps,
     Icons.public,
     Icons.info
@@ -600,6 +603,37 @@ class _SettingsPageState extends State<SettingsPage> implements PopEntry{
     );
   }
 
+  Widget buildServerSettings() {
+    return Column(
+      children: [
+        ListTile(
+          leading: const Icon(Icons.settings),
+          title: Text("服务器配置".tl),
+          subtitle: Text("配置服务器连接和账号".tl),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            context.to(() => const ServerSettingsPage());
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.cloud),
+          title: Text("浏览服务器漫画".tl),
+          subtitle: Text("查看服务器上已下载的漫画".tl),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            context.to(() => const ServerComicsPage());
+          },
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.info_outline),
+          title: Text("关于服务器".tl),
+          subtitle: Text("服务器可以在其他设备上运行，实现多设备共享漫画".tl),
+        ),
+      ],
+    );
+  }
+
   Widget buildAbout() {
     return Column(
       children: [
@@ -670,9 +704,10 @@ class _SettingsPageState extends State<SettingsPage> implements PopEntry{
       2 => const ReadingSettings(false),
       3 => buildAppearanceSettings(),
       4 => const LocalFavoritesSettings(),
-      5 => buildAppSettings(),
-      6 => const NetworkSettings(),
-      7 => buildAbout(),
+      5 => buildServerSettings(),
+      6 => buildAppSettings(),
+      7 => const NetworkSettings(),
+      8 => buildAbout(),
       _ => throw UnimplementedError()
     };
 

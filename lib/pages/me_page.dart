@@ -11,6 +11,8 @@ import 'package:pica_comic/foundation/app.dart';
 import 'history_page.dart';
 import 'package:pica_comic/tools/translations.dart';
 import 'image_favorites.dart';
+import 'package:pica_comic/pages/server_comics_page.dart';
+import 'package:pica_comic/base.dart';
 
 class MePage extends StatelessWidget {
   const MePage({super.key});
@@ -45,6 +47,10 @@ class MePage extends StatelessWidget {
                               height: 12,
                             ),
                             buildDownload(context, width),
+                            const SizedBox(
+                              height: 12,
+                            ),
+                            buildServer(context, width),
                           ],
                         ),
                       ),
@@ -76,6 +82,10 @@ class MePage extends StatelessWidget {
                     height: 12,
                   ),
                   buildDownload(context, width),
+                  const SizedBox(
+                    height: 12,
+                  ),
+                  buildServer(context, width),
                   const SizedBox(
                     height: 12,
                   ),
@@ -196,6 +206,21 @@ class MePage extends StatelessWidget {
       description:
           "共 @a 部漫画".tlParams({"a": DownloadManager().total.toString()}),
       onTap: () => context.to(() => const DownloadPage()),
+    );
+  }
+
+  Widget buildServer(BuildContext context, double width) {
+    final serverUrl = appdata.settings[90];
+    final hasServer = serverUrl.isNotEmpty;
+    
+    return _MePageCard(
+      icon: Icon(
+        hasServer ? Icons.cloud_done : Icons.cloud_off,
+        color: hasServer ? Colors.green : null,
+      ),
+      title: "服务器漫画".tl,
+      description: hasServer ? "连接到远程服务器".tl : "未配置服务器".tl,
+      onTap: () => context.to(() => const ServerComicsPage()),
     );
   }
 

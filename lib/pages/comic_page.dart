@@ -20,6 +20,7 @@ import 'package:pica_comic/foundation/ui_mode.dart';
 import 'package:pica_comic/network/base_comic.dart';
 import 'package:pica_comic/network/download.dart';
 import 'package:pica_comic/network/res.dart';
+import 'package:pica_comic/network/server_client.dart';
 import 'package:pica_comic/pages/favorites/local_favorites.dart';
 import 'package:pica_comic/pages/reader/comic_reading_page.dart';
 import 'package:pica_comic/pages/search_result_page.dart';
@@ -95,7 +96,7 @@ class _ComicPageImpl extends BaseComicPage<ComicInfoData> {
       if (eps == null) {
         DownloadManager().addCustomDownload(data!, [0]);
         App.globalBack();
-        showToast(message: "已加入下载队列".tl);
+        showToast(message: "已加入本地下载队列".tl);
         return;
       }
     }
@@ -103,21 +104,91 @@ class _ComicPageImpl extends BaseComicPage<ComicInfoData> {
       showModalBottomSheet(
           context: App.globalContext!,
           builder: (context) {
-            return SelectDownloadChapter(eps, (selectedEps) {
-              DownloadManager().addCustomDownload(data!, selectedEps);
-              App.globalBack();
-              showToast(message: "已加入下载队列".tl);
-            }, downloaded);
+            return SelectDownloadChapter(
+              eps: eps,
+              downloadedEps: downloaded,
+              onLocalDownload: (selectedEps) {
+                DownloadManager().addCustomDownload(data!, selectedEps);
+                App.globalBack();
+                showToast(message: "已加入本地下载队列".tl);
+              },
+              onServerDownload: _downloadToServer,
+              serverAvailable: appdata.settings[90].isNotEmpty,
+              serverStatus: appdata.settings[90].isEmpty ? "未配置服务器".tl : null,
+              initialTarget: appdata.settings[90].isNotEmpty
+                  ? DownloadTarget.server
+                  : DownloadTarget.local,
+            );
           });
     } else {
       showSideBar(
           App.globalContext!,
-          SelectDownloadChapter(eps, (selectedEps) {
-            DownloadManager().addCustomDownload(data!, selectedEps);
-            App.globalBack();
-            showToast(message: "已加入下载队列".tl);
-          }, downloaded),
+          SelectDownloadChapter(
+            eps: eps,
+            downloadedEps: downloaded,
+            onLocalDownload: (selectedEps) {
+              DownloadManager().addCustomDownload(data!, selectedEps);
+              App.globalBack();
+              showToast(message: "已加入本地下载队列".tl);
+            },
+            onServerDownload: _downloadToServer,
+            serverAvailable: appdata.settings[90].isNotEmpty,
+            serverStatus: appdata.settings[90].isEmpty ? "未配置服务器".tl : null,
+            initialTarget: appdata.settings[90].isNotEmpty
+                ? DownloadTarget.server
+                : DownloadTarget.local,
+          ),
           useSurfaceTintColor: true);
+    }
+  }
+
+  Future<void> _downloadToServer(List<int> selectedEps) async {
+    final serverUrl = appdata.settings[90];
+    if (serverUrl.isEmpty) {
+      showToast(message: '请先在设置中配置服务器地址'.tl);
+      return;
+    }
+
+    final client = ServerClient(serverUrl);
+
+    try {
+      showLoadingDialog(App.globalContext!, allowCancel: false);
+
+      final eps = data!.chapters?.values.toList();
+      final sanitized = eps == null
+          ? <int>[]
+          : selectedEps.where((idx) => idx >= 0 && idx < eps.length).toList();
+      if (eps != null && sanitized.isEmpty) {
+        Navigator.pop(App.globalContext!);
+        showToast(message: '请选择章节'.tl);
+        return;
+      }
+
+      await client.addDownloadTask(
+        comicId: id,
+        source: sourceKey,
+        title: data!.title,
+        author: data!.subTitle ?? '',
+        cover: data!.cover,
+        tags: data!.tags,
+        description: data!.description ?? '',
+        eps: sanitized.isEmpty
+            ? const []
+            : sanitized.map((index) => index + 1).toList(),
+        epNames: sanitized.isEmpty
+            ? const []
+            : sanitized.map((i) => eps![i]).toList(),
+      );
+
+      Navigator.pop(App.globalContext!);
+      App.globalBack();
+      showToast(message: '已添加到服务器下载队列'.tl);
+    } on ServerException catch (e) {
+      Navigator.pop(App.globalContext!);
+      showToast(message: e.message);
+    } catch (e) {
+      Navigator.pop(App.globalContext!);
+      showToast(message: '添加失败: $e');
     }
   }
 

@@ -3,6 +3,7 @@ import 'package:pica_comic/comic_source/comic_source.dart';
 import 'package:pica_comic/components/components.dart';
 import 'package:pica_comic/network/nhentai_network/nhentai_main_network.dart';
 import 'package:pica_comic/network/res.dart';
+import 'package:pica_comic/network/server_client.dart';
 import 'package:pica_comic/pages/category_comics_page.dart';
 import 'package:pica_comic/pages/comic_page.dart';
 import 'package:pica_comic/pages/reader/comic_reading_page.dart';
@@ -116,8 +117,82 @@ class NhentaiComicPage extends BaseComicPage<NhentaiComic> {
         return;
       }
     }
-    DownloadManager().addNhentaiDownload(data!);
-    showToast(message: "已加入下载队列".tl);
+    
+    // 检查是否配置了服务器
+    final serverUrl = appdata.settings[90];
+    if (serverUrl.isEmpty) {
+      // 本地下载
+      DownloadManager().addNhentaiDownload(data!);
+      showToast(message: "已加入下载队列".tl);
+      return;
+    }
+    
+    // 显示选择对话框
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("选择下载位置".tl),
+        content: Text("请选择下载到本地还是服务器".tl),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              DownloadManager().addNhentaiDownload(data!);
+              showToast(message: "已加入本地下载队列".tl);
+            },
+            child: Text("本地设备".tl),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _downloadToServer();
+            },
+            child: Text("远程服务器".tl),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Future<void> _downloadToServer() async {
+    showLoadingDialog(App.globalContext!, allowCancel: false);
+    try {
+      // 获取图片 URL
+      final network = NhentaiNetwork();
+      final pagesRes = await network.getImages(data!.id);
+      if (pagesRes.error) {
+        throw Exception("获取图片列表失败: ${pagesRes.errorMessage}");
+      }
+      
+      // 构建章节数据（NHentai 只有一个章节）
+      final episodes = [
+        DirectEpisode(
+          order: 1,
+          name: "第一章".tl,
+          pageUrls: pagesRes.data,
+        ),
+      ];
+      
+      // 发送到服务器
+      final serverUrl = appdata.settings[90];
+      final client = ServerClient(serverUrl);
+      await client.submitDirectDownload(
+        comicId: "nhentai${data!.id}",
+        source: "nhentai",
+        title: data!.title,
+        author: "",
+        cover: data!.cover,
+        tags: data!.tags,
+        description: "",
+        episodes: episodes,
+      );
+      
+      Navigator.pop(App.globalContext!);
+      showToast(message: "已提交到服务器下载 (${pagesRes.data.length} 张图片)".tl);
+    } catch (e) {
+      Navigator.pop(App.globalContext!);
+      showToast(message: "提交失败: $e");
+    }
   }
 
   @override

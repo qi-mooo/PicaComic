@@ -19,6 +19,7 @@ import '../../foundation/ui_mode.dart';
 import '../../network/download.dart';
 import '../../network/jm_network/jm_models.dart';
 import '../../network/jm_network/jm_network.dart';
+import '../../network/server_client.dart';
 import 'jm_comments_page.dart';
 
 class JmComicPage extends BaseComicPage<JmComicInfo> {
@@ -82,7 +83,7 @@ class JmComicPage extends BaseComicPage<JmComicInfo> {
       },
       cancelPlatformFavorite: () async {
         var res = await jmNetwork.favorite(id, null);
-        if(res.success) {
+        if (res.success) {
           data!.favorite = false;
         }
         return res;
@@ -134,7 +135,8 @@ class JmComicPage extends BaseComicPage<JmComicInfo> {
   @override
   Future<bool> loadFavorite(JmComicInfo data) async {
     return data.favorite ||
-        (await LocalFavoritesManager().findWithModel(toLocalFavoriteItem())).isNotEmpty;
+        (await LocalFavoritesManager().findWithModel(toLocalFavoriteItem()))
+            .isNotEmpty;
   }
 
   @override
@@ -160,12 +162,9 @@ class JmComicPage extends BaseComicPage<JmComicInfo> {
   Map<String, List<String>>? get tags => {
         "ID": "JM${data!.id}".toList(),
         "作者".tl: (data!.author.isEmpty) ? "未知".tl.toList() : data!.author,
-        if (data!.works.isNotEmpty)
-          "作品".tl: data!.works,
-        if (data!.actors.isNotEmpty)
-          "登场人物".tl: data!.actors,
-        if (data!.tags.isNotEmpty)
-          "标签".tl: data!.tags
+        if (data!.works.isNotEmpty) "作品".tl: data!.works,
+        if (data!.actors.isNotEmpty) "登场人物".tl: data!.actors,
+        if (data!.tags.isNotEmpty) "标签".tl: data!.tags
       };
 
   @override
@@ -191,8 +190,7 @@ class JmComicPage extends BaseComicPage<JmComicInfo> {
       id,
       data!.author.elementAtOrNull(0) ?? "",
       data!.name,
-      data!.description,
-      []));
+      data!.description, []));
 
   @override
   String get downloadedId => "jm${data!.id}";
@@ -219,30 +217,104 @@ void downloadComic(JmComicInfo comic, BuildContext context) async {
 
   var downloaded = <int>[];
   if (DownloadManager().isExists("jm${comic.id}")) {
-    var downloadedComic =
-        (await DownloadManager().getComicOrNull("jm${comic.id}"))!
-        as DownloadedJmComic;
+    var downloadedComic = (await DownloadManager()
+        .getComicOrNull("jm${comic.id}"))! as DownloadedJmComic;
     downloaded.addAll(downloadedComic.downloadedEps);
   }
 
+  Future<void> downloadToServer(List<int> selectedEps) async {
+    final serverUrl = appdata.settings[90];
+    if (serverUrl.isEmpty) {
+      showToast(message: "请先在设置中配置服务器地址".tl);
+      return;
+    }
+
+    final sanitized =
+        selectedEps.where((idx) => idx >= 0 && idx < eps.length).toList();
+
+    if (sanitized.isEmpty) {
+      showToast(message: "请选择章节".tl);
+      return;
+    }
+
+    showLoadingDialog(App.globalContext!, allowCancel: false);
+    try {
+      // 🆕 使用直接下载模式：拦截客户端获取的URL并发送到服务器
+      final network = JmNetwork();
+      final episodes = <DirectEpisode>[];
+      
+      for (var idx in sanitized) {
+        // JM 的章节索引从 1 开始
+        final chapterKey = idx + 1;
+        final epName = eps[idx];
+        final chapterId = comic.series[chapterKey];
+        
+        if (chapterId == null) continue;
+        
+        // 获取这个章节的图片URL
+        final pagesRes = await network.getChapter(chapterId);
+        if (pagesRes.error) {
+          throw Exception("获取章节 $epName 失败: ${pagesRes.errorMessage}");
+        }
+        
+        episodes.add(DirectEpisode(
+          order: chapterKey,
+          name: epName,
+          pageUrls: pagesRes.data,
+        ));
+      }
+      
+      // 发送到服务器
+      final client = ServerClient(serverUrl);
+      await client.submitDirectDownload(
+        comicId: "jm${comic.id}",
+        source: "jm",
+        title: comic.name,
+        author: (comic.author.isNotEmpty ? comic.author.join(', ') : ''),
+        cover: comic.cover,
+        tags: {"tags": comic.tags},
+        description: comic.description ?? "",
+        episodes: episodes,
+      );
+      
+      Navigator.pop(App.globalContext!);
+      App.globalBack();
+      showToast(message: "已提交到服务器下载 (共 ${episodes.length} 个章节)".tl);
+    } on ServerException catch (e) {
+      Navigator.pop(App.globalContext!);
+      showToast(message: e.message);
+    } catch (e) {
+      Navigator.pop(App.globalContext!);
+      showToast(message: "添加失败: $e");
+    }
+  }
+
+  final target = SelectDownloadChapter(
+    eps: eps,
+    downloadedEps: downloaded,
+    onLocalDownload: (selectedEps) {
+      downloadManager.addJmDownload(comic, selectedEps);
+      App.globalBack();
+      showToast(message: "已加入下载队列".tl);
+    },
+    onServerDownload: appdata.settings[90].isNotEmpty ? downloadToServer : null,
+    serverAvailable: appdata.settings[90].isNotEmpty,
+    serverStatus: appdata.settings[90].isEmpty ? "未配置服务器".tl : null,
+    initialTarget: appdata.settings[90].isNotEmpty
+        ? DownloadTarget.server
+        : DownloadTarget.local,
+  );
+
   if (UiMode.m1(App.globalContext!)) {
     showModalBottomSheet(
-        context: App.globalContext!,
-        builder: (context) {
-          return SelectDownloadChapter(eps, (selectedEps) {
-            downloadManager.addJmDownload(comic, selectedEps);
-            App.globalBack();
-            showToast(message: "已加入下载队列".tl);
-          }, downloaded);
-        });
+      context: App.globalContext!,
+      builder: (context) => target,
+    );
   } else {
     showSideBar(
-        App.globalContext!,
-        SelectDownloadChapter(eps, (selectedEps) {
-          downloadManager.addJmDownload(comic, selectedEps);
-          App.globalBack();
-          showToast(message: "已加入下载队列".tl);
-        }, downloaded),
-        useSurfaceTintColor: true);
+      App.globalContext!,
+      target,
+      useSurfaceTintColor: true,
+    );
   }
 }

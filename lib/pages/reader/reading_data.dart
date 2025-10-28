@@ -398,3 +398,119 @@ class CustomReadingData extends ReadingData{
   @override
   FavoriteType get favoriteType => FavoriteType(source!.intKey);
 }
+
+class ServerReadingData extends ReadingData {
+  final String serverUrl;
+  final ServerComicDetail comic;
+
+  ServerReadingData({
+    required this.serverUrl,
+    required this.comic,
+  }) {
+    downloadedEps = comic.downloadedEps ?? [];
+  }
+
+  @override
+  String get title => comic.title;
+
+  @override
+  String get id => comic.id;
+
+  @override
+  String get downloadId => 'server_${comic.id}';
+
+  @override
+  String get sourceKey => comic.type;
+
+  @override
+  ComicType get type {
+    switch (comic.type) {
+      case 'picacg':
+        return ComicType.picacg;
+      case 'jm':
+        return ComicType.jm;
+      case 'ehentai':
+        return ComicType.ehentai;
+      case 'nhentai':
+        return ComicType.nhentai;
+      case 'htManga':
+        return ComicType.htManga;
+      case 'hitomi':
+        return ComicType.hitomi;
+      default:
+        return ComicType.other;
+    }
+  }
+
+  @override
+  bool get hasEp => (comic.eps?.isNotEmpty ?? false);
+
+  @override
+  Map<String, String>? get eps {
+    if (comic.eps == null) return null;
+    return Map.fromIterables(
+      List.generate(comic.eps!.length, (i) => i.toString()),
+      comic.eps!,
+    );
+  }
+
+  @override
+  bool get downloaded => true; // 服务器漫画已下载
+
+  @override
+  FavoriteType get favoriteType {
+    switch (comic.type) {
+      case 'picacg':
+        return FavoriteType.picacg;
+      case 'jm':
+        return FavoriteType.jm;
+      case 'ehentai':
+        return FavoriteType.ehentai;
+      case 'nhentai':
+        return FavoriteType.nhentai;
+      case 'htManga':
+        return FavoriteType.htManga;
+      case 'hitomi':
+        return FavoriteType.hitomi;
+      default:
+        return FavoriteType(99); // 服务器漫画
+    }
+  }
+
+  @override
+  Future<Res<List<String>>> loadEpNetwork(int ep) async {
+    // 服务器漫画从服务器获取准确的页面数量
+    try {
+      final client = ServerClient(serverUrl);
+      final pageCount = await client.getEpisodePageCount(comic.id, ep);
+      
+      // 返回空URL列表，实际图片从服务器获取
+      return Res(List.filled(pageCount, ""));
+    } catch (e) {
+      // 如果获取失败，使用估算值
+      int pageCount = 200; // 默认最大页数
+      
+      if (comic.epsCount > 0 && comic.pagesCount > 0) {
+        // 使用平均页数作为估算
+        pageCount = (comic.pagesCount / comic.epsCount).ceil() + 10; // 添加缓冲
+      }
+      
+      return Res(List.filled(pageCount, ""));
+    }
+  }
+
+  @override
+  Stream<DownloadProgress> loadImageNetwork(int ep, int page, String url) async* {
+    // 服务器漫画从服务器API获取图片
+    // 注意：page参数从0开始，但服务器图片ID从1开始
+    final client = ServerClient(serverUrl);
+    final imageUrl = client.getComicPageUrl(comic.id, ep, page + 1);
+    
+    yield* ImageManager().getImage(imageUrl);
+  }
+
+  @override
+  String buildImageKey(int ep, int page, String url) {
+    return '${comic.id}_${ep}_$page';
+  }
+}

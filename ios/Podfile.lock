@@ -121,7 +121,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   app_links: a4b32f8e33734545a294f23c9b76d1ebe38abf30
   file_selector_ios: f92e583d43608aebc2e4a18daac30b8902845502
-  Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_file_dialog: ca8d7fbd1772d4f0c2777b4ab20a7787ef4e7dd8
   flutter_inappwebview_ios: b89ba3482b96fb25e00c967aae065701b66e9b99
   flutter_local_notifications: ad39620c743ea4c15127860f4b5641649a988100

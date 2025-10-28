@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:pica_comic/foundation/image_manager.dart';
 import 'package:pica_comic/network/download_model.dart';
+import 'package:pica_comic/network/server_client.dart';
 import 'package:pica_comic/tools/extensions.dart';
 import 'package:pica_comic/tools/io_tools.dart';
 import '../../base.dart';
@@ -75,7 +76,7 @@ class DownloadedComic extends DownloadedItem {
 class PicDownloadingItem extends DownloadingItem {
   PicDownloadingItem(this.comic, this._downloadEps, super.whenFinish,
       super.whenError, super.updateInfo, super.id,
-      {super.type = DownloadType.picacg});
+      {super.type = DownloadType.picacg, this.downloadToServer = false, this.serverUrl});
 
   ///漫画模型
   final ComicItem comic;
@@ -85,6 +86,12 @@ class PicDownloadingItem extends DownloadingItem {
 
   ///要下载的章节序号
   final List<int> _downloadEps;
+
+  /// 是否下载到服务器
+  final bool downloadToServer;
+
+  /// 服务器 URL（如果下载到服务器）
+  final String? serverUrl;
 
   ///获取各章节名称
   List<String> get eps => _eps;
@@ -102,7 +109,52 @@ class PicDownloadingItem extends DownloadingItem {
     for (var i in _downloadEps) {
       res[i + 1] = (await network.getComicContent(id, i + 1)).data;
     }
+
+    // 🆕 如果选择下载到服务器，发送直接下载请求
+    if (downloadToServer && serverUrl != null) {
+      await _sendDirectDownloadToServer(res);
+    }
+
     return res;
+  }
+
+  /// 发送直接下载请求到服务器
+  Future<void> _sendDirectDownloadToServer(Map<int, List<String>> links) async {
+    try {
+      final client = ServerClient(serverUrl!);
+      
+      // 构建章节数据
+      final episodes = <DirectEpisode>[];
+      for (var entry in links.entries) {
+        final epIndex = entry.key - 1; // 转换为 0-based 索引
+        final epName = epIndex < _eps.length ? _eps[epIndex] : '第 ${entry.key} 话';
+        episodes.add(DirectEpisode(
+          order: entry.key,
+          name: epName,
+          pageUrls: entry.value,
+        ));
+      }
+
+      // 发送到服务器
+      await client.submitDirectDownload(
+        comicId: id,
+        source: 'picacg',
+        title: comic.title,
+        author: comic.author ?? '',
+        cover: getImageUrl(comic.thumbUrl),
+        tags: {'category': comic.categories},
+        description: comic.description ?? '',
+        episodes: episodes,
+      );
+
+      // 下载到服务器后，本地不再需要下载，抛出特殊异常停止
+      throw ServerDownloadException('已提交到服务器下载');
+    } catch (e) {
+      if (e is ServerDownloadException) {
+        rethrow;
+      }
+      throw Exception('发送到服务器失败: $e');
+    }
   }
 
   @override
@@ -127,6 +179,8 @@ class PicDownloadingItem extends DownloadingItem {
       : comic = ComicItem.fromJson(map["comic"]),
         _eps = List<String>.from(map["_eps"]),
         _downloadEps = List<int>.from(map["_downloadEps"]),
+        downloadToServer = false,  // 从持久化恢复时，默认为本地下载
+        serverUrl = null,           // 从持久化恢复时，服务器URL为空
         super.fromMap(map, whenFinish, whenError, updateInfo);
 
   @override
@@ -146,4 +200,13 @@ class PicDownloadingItem extends DownloadingItem {
       downloaded,
     );
   }
+}
+
+/// 服务器下载异常（用于标记已提交到服务器下载）
+class ServerDownloadException implements Exception {
+  final String message;
+  ServerDownloadException(this.message);
+
+  @override
+  String toString() => message;
 }

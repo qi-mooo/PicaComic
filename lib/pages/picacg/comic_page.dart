@@ -3,6 +3,7 @@ import 'package:pica_comic/comic_source/built_in/picacg.dart';
 import 'package:pica_comic/components/select_download_eps.dart';
 import 'package:pica_comic/network/download.dart';
 import 'package:pica_comic/network/picacg_network/methods.dart';
+import 'package:pica_comic/network/server_client.dart';
 import 'package:pica_comic/foundation/ui_mode.dart';
 import 'package:pica_comic/network/res.dart';
 import 'package:pica_comic/pages/category_comics_page.dart';
@@ -58,7 +59,7 @@ class PicacgComicPage extends BaseComicPage<ComicItem> {
       },
       cancelPlatformFavorite: () async {
         var res = await network.favouriteOrUnfavouriteComic(id);
-        if(res) {
+        if (res) {
           data!.isFavourite = false;
           return const Res(true);
         }
@@ -67,7 +68,7 @@ class PicacgComicPage extends BaseComicPage<ComicItem> {
       selectFolderCallback: (name, p) async {
         if (p == 0) {
           var res = await network.favouriteOrUnfavouriteComic(id);
-          if(res) {
+          if (res) {
             data!.isFavourite = true;
             update();
             return const Res(true);
@@ -179,7 +180,8 @@ class PicacgComicPage extends BaseComicPage<ComicItem> {
   @override
   Future<bool> loadFavorite(ComicItem data) async {
     return data.isFavourite ||
-        (await LocalFavoritesManager().findWithModel(toLocalFavoriteItem())).isNotEmpty;
+        (await LocalFavoritesManager().findWithModel(toLocalFavoriteItem()))
+            .isNotEmpty;
   }
 
   @override
@@ -255,18 +257,84 @@ void _downloadComic(
   }
   var downloaded = <int>[];
   if (DownloadManager().isExists(comic.id)) {
-    var downloadedComic = (await DownloadManager().getComicOrNull(comic.id))!
-      as DownloadedComic;
+    var downloadedComic =
+        (await DownloadManager().getComicOrNull(comic.id))! as DownloadedComic;
     downloaded.addAll(downloadedComic.downloadedEps);
   }
+  var serverUrl = appdata.settings[90];
   var content = SelectDownloadChapter(
-    eps,
-    (selectedEps) {
+    eps: eps,
+    downloadedEps: downloaded,
+    onLocalDownload: (selectedEps) {
       downloadManager.addPicDownload(comic, selectedEps);
       App.globalBack();
       showToast(message: "已加入下载队列".tl);
     },
-    downloaded,
+    onServerDownload: serverUrl.isEmpty
+        ? null
+        : (selectedEps) async {
+            final sanitized = selectedEps
+                .where((idx) => idx >= 0 && idx < eps.length)
+                .toList();
+            if (sanitized.isEmpty) {
+              showToast(message: "请选择章节".tl);
+              return;
+            }
+            showLoadingDialog(App.globalContext!, allowCancel: false);
+            try {
+              // 🆕 使用直接下载模式：拦截客户端获取的URL并发送到服务器
+              final network = PicacgNetwork();
+              final allEps = (await network.getEps(comic.id)).data;
+              
+              final episodes = <DirectEpisode>[];
+              for (var idx in sanitized) {
+                final epOrder = idx + 1;
+                final epName = idx < allEps.length ? allEps[idx] : '第 $epOrder 话';
+                
+                // 获取这个章节的图片URL
+                final pagesRes = await network.getComicContent(comic.id, epOrder);
+                if (pagesRes.error) {
+                  throw Exception("获取章节 $epName 失败: ${pagesRes.errorMessage}");
+                }
+                
+                episodes.add(DirectEpisode(
+                  order: epOrder,
+                  name: epName,
+                  pageUrls: pagesRes.data,
+                ));
+              }
+              
+              // 发送到服务器
+              final client = ServerClient(serverUrl);
+              await client.submitDirectDownload(
+                comicId: comic.id,
+                source: "picacg",
+                title: comic.title,
+                author: comic.author,
+                cover: getImageUrl(comic.thumbUrl),  // 使用 getImageUrl 处理封面URL
+                tags: {
+                  "category": comic.categories,  // 分类
+                  "tags": comic.tags,           // 标签
+                },
+                description: comic.description,
+                episodes: episodes,
+              );
+              
+              Navigator.pop(App.globalContext!);
+              App.globalBack();
+              showToast(message: "已提交到服务器下载 (共 ${episodes.length} 个章节)".tl);
+            } on ServerException catch (e) {
+              Navigator.pop(App.globalContext!);
+              showToast(message: e.message);
+            } catch (e) {
+              Navigator.pop(App.globalContext!);
+              showToast(message: "添加失败: $e");
+            }
+          },
+    serverAvailable: serverUrl.isNotEmpty,
+    serverStatus: serverUrl.isEmpty ? "未配置服务器".tl : null,
+    initialTarget:
+        serverUrl.isNotEmpty ? DownloadTarget.server : DownloadTarget.local,
   );
   if (UiMode.m1(App.globalContext!)) {
     showModalBottomSheet(

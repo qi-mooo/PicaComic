@@ -17,6 +17,7 @@ import 'package:pica_comic/pages/search_result_page.dart';
 import 'package:pica_comic/tools/extensions.dart';
 import 'package:pica_comic/tools/tags_translation.dart';
 import 'package:pica_comic/tools/translations.dart';
+import 'package:pica_comic/network/server_client.dart';
 
 class HitomiComicPage extends BaseComicPage<HitomiComic> {
   HitomiComicPage(HitomiComicBrief comic, {super.key})
@@ -59,7 +60,104 @@ class HitomiComicPage extends BaseComicPage<HitomiComic> {
   String? get cover => data?.cover ?? comicCover;
 
   @override
-  void download() => _downloadComic(data!, context, cover!, link);
+  void download() {
+    // 检查服务器配置
+    var serverUrl = appdata.settings[90];
+    if (serverUrl != null && serverUrl.isNotEmpty) {
+      // 显示选择下载目标对话框
+      showDialog(
+        context: App.globalContext!,
+        builder: (context) => AlertDialog(
+          title: Text("选择下载位置".tl),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.phone_android),
+                title: Text("本地设备".tl),
+                onTap: () {
+                  App.globalBack();
+                  _downloadComic(data!, this.context, cover!, link);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.cloud_upload),
+                title: Text("远程服务器".tl),
+                subtitle: Text(serverUrl),
+                onTap: () async {
+                  App.globalBack();
+                  try {
+                    await _downloadToServer(serverUrl);
+                  } catch (e) {
+                    showToast(message: "下载失败: $e");
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => App.globalBack(),
+              child: Text("取消".tl),
+            ),
+          ],
+        ),
+      );
+    } else {
+      _downloadComic(data!, context, cover!, link);
+    }
+  }
+
+  Future<void> _downloadToServer(String serverUrl) async {
+    showLoadingDialog(App.globalContext!, allowCancel: false);
+
+    try {
+      // 获取所有图片URL
+      var gg = GG();
+      var images = <String>[];
+      for (var file in data!.files) {
+        images.add(await gg.urlFromUrlFromHash(
+            data!.id, file, "webp", "webp"));
+      }
+
+      // 构建episode
+      final episodes = [
+        DirectEpisode(
+          order: 1,
+          name: "EP 1",
+          pageUrls: images,
+        ),
+      ];
+
+      // 提取tags
+      Map<String, List<String>> tagsMap = {
+        "artists": data!.artists ?? [],
+        "groups": data!.group,
+        "type": [data!.type],
+        "tags": data!.tags.map((e) => e.name).toList(),
+      };
+
+      // 发送到服务器
+      final client = ServerClient(serverUrl);
+      await client.submitDirectDownload(
+        comicId: "hitomi${data!.id}",
+        source: "hitomi",
+        title: data!.title,
+        author: (data!.artists ?? []).isEmpty ? "" : data!.artists![0],
+        cover: cover!,
+        tags: tagsMap,
+        description: "",
+        episodes: episodes,
+      );
+
+      App.globalBack();
+      showToast(message: "已提交到服务器下载".tl);
+    } catch (e, s) {
+      LogManager.addLog(LogLevel.error, "Hitomi Download", "$e\n$s");
+      App.globalBack();
+      showToast(message: "提交失败: $e");
+    }
+  }
 
   @override
   EpsData? get eps => null;

@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,7 +33,7 @@ import 'package:pica_comic/foundation/local_favorites.dart';
 import 'package:pica_comic/network/eh_network/eh_download_model.dart';
 import 'package:pica_comic/network/jm_network/jm_download.dart';
 import 'package:pica_comic/network/picacg_network/picacg_download_model.dart';
-import 'dart:io';
+import 'package:pica_comic/network/server_client.dart';
 import 'package:pica_comic/tools/translations.dart';
 import 'package:pica_comic/components/components.dart';
 
@@ -736,6 +738,10 @@ class DownloadPage extends StatelessWidget {
                       onTap: () => exportAsPdf(null, logic),
                     ),
                     PopupMenuItem(
+                      child: Text("导出到服务器".tl),
+                      onTap: () => exportToServer(context, logic),
+                    ),
+                    PopupMenuItem(
                       child: Text("查看漫画详情".tl),
                       onTap: () => Future.delayed(
                           const Duration(milliseconds: 200), () {
@@ -821,6 +827,401 @@ class DownloadPage extends StatelessWidget {
       Future<void>.delayed(
           const Duration(milliseconds: 500), () => export(logic));
     }
+  }
+
+  void exportToServer(BuildContext context, DownloadPageLogic logic) async {
+    print('\n╔════════════════════════════════════════╗');
+    print('║   开始执行导出到服务器功能           ║');
+    print('╚════════════════════════════════════════╝');
+    
+    // 检查是否选择了漫画
+    print('[导出] 检查选中的漫画数量: ${logic.selectedNum}');
+    if (logic.selectedNum == 0) {
+      print('[导出] ❌ 错误: 没有选中任何漫画');
+      showToast(message: "请选择漫画".tl);
+      return;
+    }
+
+    // 检查服务器配置
+    var serverUrl = appdata.settings[90];
+    print('[导出] 服务器URL配置: $serverUrl');
+    
+    if (serverUrl == null || serverUrl.isEmpty) {
+      print('[导出] ❌ 错误: 服务器URL未配置');
+      showToast(message: "请先在设置中配置服务器地址".tl);
+      return;
+    }
+
+    // 获取选中的漫画
+    var selectedComics = <DownloadedItem>[];
+    for (int i = 0; i < logic.selected.length; i++) {
+      if (logic.selected[i]) {
+        selectedComics.add(logic.comics[i]);
+      }
+    }
+
+    print('[导出] 实际选中的漫画数量: ${selectedComics.length}');
+    for (int i = 0; i < selectedComics.length; i++) {
+      print('[导出]   ${i + 1}. ${selectedComics[i].name} (${selectedComics[i].downloadedEps.length} 章节)');
+    }
+
+    if (selectedComics.isEmpty) {
+      print('[导出] ❌ 错误: 选中列表为空');
+      return;
+    }
+    
+    print('[导出] ✓ 准备显示确认对话框\n');
+
+    // 显示确认对话框
+    showDialog(
+      context: App.globalContext!,
+      builder: (context) => AlertDialog(
+        title: Text("导出到服务器".tl),
+        content: Text("要将 ${selectedComics.length} 个已下载的漫画上传到服务器吗？\n\n将会上传漫画的所有图片和元数据。"),
+        actions: [
+          TextButton(
+            onPressed: () => App.globalBack(),
+            child: Text("取消".tl),
+          ),
+          FilledButton(
+            onPressed: () async {
+              print('[导出] 用户点击了确认按钮');
+              App.globalBack();
+              
+              print('[导出] 显示加载对话框...');
+              // 显示加载对话框
+              var progressController = showLoadingDialog(
+                App.globalContext!,
+                allowCancel: false,
+              );
+              
+              print('[导出] 开始批量上传...');
+              try {
+                int successCount = 0;
+                int failCount = 0;
+
+                for (var i = 0; i < selectedComics.length; i++) {
+                  var comic = selectedComics[i];
+                  print('\n[导出队列] 正在处理第 ${i + 1}/${selectedComics.length} 个漫画: ${comic.name}');
+                  
+                  try {
+                    await _uploadComicToServer(comic, serverUrl);
+                    successCount++;
+                    print('[导出队列] ✅ 漫画 "${comic.name}" 上传成功\n');
+                  } catch (e, stackTrace) {
+                    print('[导出队列] ❌ 漫画 "${comic.name}" 上传失败');
+                    print('[导出队列] 错误信息: $e');
+                    print('[导出队列] 堆栈跟踪: $stackTrace\n');
+                    failCount++;
+                  }
+                }
+
+                progressController.close();
+                
+                print('\n╔════════════════════════════════════════╗');
+                print('║   导出完成                           ║');
+                print('╚════════════════════════════════════════╝');
+                print('[导出] 成功: $successCount 个');
+                print('[导出] 失败: $failCount 个');
+                print('[导出] 总计: ${successCount + failCount} 个\n');
+                
+                if (failCount == 0) {
+                  showToast(message: "导出成功，共 $successCount 个漫画".tl);
+                } else {
+                  showToast(message: "导出完成: $successCount 成功, $failCount 失败".tl);
+                }
+              } catch (e, stackTrace) {
+                print('\n╔════════════════════════════════════════╗');
+                print('║   导出失败（异常）                   ║');
+                print('╚════════════════════════════════════════╝');
+                print('[导出] 异常: $e');
+                print('[导出] 堆栈: $stackTrace\n');
+                progressController.close();
+                showToast(message: "导出失败: $e");
+              }
+            },
+            child: Text("确认".tl),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _uploadComicToServer(DownloadedItem comic, String serverUrl) async {
+    print('========================================');
+    print('[导出] *** 开始导出漫画到服务器 ***');
+    print('[导出] 漫画名称: ${comic.name}');
+    print('[导出] 漫画ID: ${comic.id}');
+    print('[导出] 漫画类型: ${comic.type}');
+    print('========================================');
+    
+    final dio = Dio();
+    final downloadManager = DownloadManager();
+    
+    // 使用 downloadManager.getDirectory() 获取正确的目录名（和导出PDF一样的方式）
+    final downloadPath = downloadManager.path!;
+    final directory = downloadManager.getDirectory(comic.id);
+    final comicPath = '$downloadPath/$directory';
+    
+    print('[导出] 下载根路径: $downloadPath');
+    print('[导出] 漫画目录名: $directory');
+    print('[导出] 完整路径: $comicPath');
+    print('[导出] 已下载章节数量: ${comic.downloadedEps.length}');
+    print('[导出] 已下载章节列表: ${comic.downloadedEps}');
+    print('[导出] 章节名称列表: ${comic.eps}');
+    print('========================================');
+    
+    // 提取tags和描述（转换为Map<String, List<String>>格式）
+    Map<String, List<String>> tagsMap = {};
+    String description = '';
+    
+    if (comic is DownloadedComic) {
+      // Picacg漫画
+      tagsMap = {
+        "category": comic.comicItem.categories,
+        "tags": comic.comicItem.tags,
+      };
+      description = comic.comicItem.description ?? '';
+    } else if (comic is DownloadedGallery) {
+      // EHentai漫画
+      tagsMap = {
+        "type": [comic.gallery.type],
+        "uploader": [comic.gallery.uploader],
+        ...comic.gallery.tags
+      };
+      description = 'EHentai Gallery';
+    } else if (comic is DownloadedHitomiComic) {
+      // Hitomi漫画
+      tagsMap = {
+        "artists": comic.comic.artists ?? [],
+        "groups": comic.comic.group,
+        "type": [comic.comic.type],
+        "tags": comic.comic.tags.map((e) => e.name).toList(),
+      };
+      description = 'Hitomi Comic';
+    } else if (comic is DownloadedJmComic) {
+      // JM漫画
+      tagsMap = {
+        "tags": comic.tags,
+      };
+      description = comic.comic.description ?? '';
+    } else if (comic is NhentaiDownloadedComic) {
+      // NHentai漫画
+      tagsMap = {
+        "tags": comic.tags,
+      };
+      description = 'NHentai Comic';
+    } else if (comic is DownloadedHtComic) {
+      // HTManga漫画
+      tagsMap = {
+        "tags": comic.tags,
+      };
+      description = 'HTManga Comic';
+    } else {
+      // 其他漫画源，使用简单的tags列表
+      tagsMap = {"tags": comic.tags};
+      description = '';
+    }
+    
+    // 计算文件总数用于进度显示
+    int totalFiles = 0;
+    int uploadedFiles = 0;
+    
+    // 统计需要上传的文件数量
+    print('[导出] 开始统计文件...');
+    for (int ep in comic.downloadedEps) {
+      final actualEp = ep + 1;  // downloadedEps 是索引(从0开始)，目录名是章节号(从1开始)
+      final epDir = Directory('$comicPath/$actualEp');
+      if (await epDir.exists()) {
+        final files = await epDir.list().toList();
+        int epFileCount = 0;
+        for (var file in files) {
+          if (file is File && _isImageFile(file.path)) {
+            totalFiles++;
+            epFileCount++;
+          }
+        }
+        print('[导出] 章节 $actualEp: $epFileCount 个图片文件');
+      } else {
+        print('[导出] 警告: 章节目录不存在: ${epDir.path}');
+      }
+    }
+    print('[导出] 统计完成: 总共 $totalFiles 个图片文件需要上传');
+    
+    // 创建FormData并添加基本信息
+    final formData = FormData();
+    formData.fields.addAll([
+      MapEntry('comic_id', comic.id),
+      MapEntry('title', comic.name),
+      MapEntry('type', comic.type.toString().split('.').last),
+      MapEntry('author', comic.subTitle),
+      MapEntry('description', description),
+      MapEntry('tags', jsonEncode(tagsMap)),
+      MapEntry('eps', jsonEncode(comic.eps)),
+      MapEntry('downloaded_eps', jsonEncode(comic.downloadedEps)),
+      MapEntry('download_time', comic.time?.toIso8601String() ?? DateTime.now().toIso8601String()),
+    ]);
+    
+    // 上传封面
+    print('[导出] 检查封面文件...');
+    final coverPath = '$comicPath/cover.jpg';
+    final coverFile = File(coverPath);
+    if (await coverFile.exists()) {
+      print('[导出] 找到封面: cover.jpg');
+      formData.files.add(MapEntry(
+        'files',
+        await MultipartFile.fromFile(coverPath, filename: 'cover.jpg'),
+      ));
+      uploadedFiles++;
+    } else {
+      // 尝试 PNG 格式封面
+      final coverPngPath = '$comicPath/cover.png';
+      final coverPngFile = File(coverPngPath);
+      if (await coverPngFile.exists()) {
+        print('[导出] 找到封面: cover.png');
+        formData.files.add(MapEntry(
+          'files',
+          await MultipartFile.fromFile(coverPngPath, filename: 'cover.png'),
+        ));
+        uploadedFiles++;
+      } else {
+        print('[导出] 警告: 未找到封面文件');
+      }
+    }
+    
+    // 上传所有章节的图片
+    print('[导出] 开始上传章节图片...');
+    print('[导出] 已下载章节列表 (索引): ${comic.downloadedEps}');
+    
+    for (int ep in comic.downloadedEps) {
+      final actualEp = ep + 1;  // downloadedEps 是索引(从0开始)，目录名是章节号(从1开始)
+      final epDir = Directory('$comicPath/$actualEp');
+      print('[导出] 检查章节索引 $ep -> 目录 $actualEp: ${epDir.path}');
+      
+      if (await epDir.exists()) {
+        print('[导出] ✓ 章节 $actualEp 目录存在');
+        final files = await epDir.list().toList();
+        print('[导出] 章节 $actualEp 目录中共有 ${files.length} 个条目');
+        
+        // 列出所有文件用于调试
+        for (var file in files) {
+          if (file is File) {
+            print('[导出] 发现文件: ${file.path.split('/').last}');
+          }
+        }
+        
+        // 对文件进行排序，确保按正确顺序上传
+        final imageFiles = files
+            .whereType<File>()
+            .where((file) => _isImageFile(file.path))
+            .toList();
+        
+        print('[导出] 章节 $actualEp: 过滤后有 ${imageFiles.length} 个图片文件');
+        
+        if (imageFiles.isEmpty) {
+          print('[导出] ⚠️ 警告: 章节 $actualEp 没有找到任何图片文件！');
+          continue;
+        }
+        
+        // 按文件名排序
+        imageFiles.sort((a, b) {
+          final aNum = _extractPageNumber(a.path);
+          final bNum = _extractPageNumber(b.path);
+          return aNum.compareTo(bNum);
+        });
+        
+        for (var file in imageFiles) {
+          final filename = file.path.split('/').last;
+          final pageNum = _extractPageNumber(file.path);
+          final ext = filename.split('.').last;
+          final uploadFilename = 'ep${actualEp}_page${pageNum.toString().padLeft(3, '0')}.$ext';
+          
+          print('[导出] 添加文件到队列: $uploadFilename (来源: $filename, 页码: $pageNum)');
+          
+          formData.files.add(MapEntry(
+            'files',
+            await MultipartFile.fromFile(
+              file.path,
+              filename: uploadFilename,
+            ),
+          ));
+          
+          uploadedFiles++;
+          
+          // 更新进度
+          if (totalFiles > 0 && uploadedFiles % 10 == 0) { // 每10个文件打印一次
+            final progress = uploadedFiles / totalFiles;
+            print('[导出] 上传进度: ${(progress * 100).toStringAsFixed(1)}% ($uploadedFiles/$totalFiles)');
+          }
+        }
+      } else {
+        print('[导出] ✗ 错误: 章节目录不存在: ${epDir.path}');
+      }
+    }
+    
+    print('[导出] 所有文件已添加到上传队列，共 ${formData.files.length} 个文件');
+    
+    // 发送上传请求
+    print('[导出] 开始发送HTTP请求到服务器...');
+    print('[导出] 服务器地址: $serverUrl/api/download/import');
+    
+    final response = await dio.post(
+      '$serverUrl/api/download/import',
+      data: formData,
+      options: Options(
+        headers: {'Content-Type': 'multipart/form-data'},
+        sendTimeout: const Duration(minutes: 30),
+        receiveTimeout: const Duration(minutes: 30),
+      ),
+      onSendProgress: (sent, total) {
+        if (total > 0) {
+          final progress = sent / total;
+          if (sent % (total ~/ 10).clamp(1, 1024 * 1024) == 0 || sent == total) { // 每10%打印一次
+            print('[导出] 网络传输进度: ${(progress * 100).toStringAsFixed(1)}% (${(sent / 1024 / 1024).toStringAsFixed(2)}MB / ${(total / 1024 / 1024).toStringAsFixed(2)}MB)');
+          }
+        }
+      },
+    );
+    
+    print('[导出] 服务器响应状态码: ${response.statusCode}');
+    
+    if (response.statusCode != 200) {
+      print('[导出] 错误: 上传失败 - ${response.data}');
+      throw Exception('上传失败: ${response.data}');
+    }
+    
+    print('[导出] ✅ 导出成功！');
+  }
+  
+  // 检查是否是图片文件
+  bool _isImageFile(String path) {
+    final ext = path.toLowerCase().split('.').last;
+    return ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'webp' || ext == 'gif';
+  }
+  
+  // 从文件名中提取页码
+  int _extractPageNumber(String path) {
+    final filename = path.split('/').last;
+    
+    // 尝试多种格式:
+    // 1. 纯数字文件名: 001.jpg, 1.jpg, 0001.png
+    // 2. page_001.jpg
+    // 3. p1.jpg
+    // 4. image_1.jpg
+    
+    // 移除扩展名
+    final nameWithoutExt = filename.substring(0, filename.lastIndexOf('.'));
+    
+    // 提取所有数字
+    final numbers = RegExp(r'\d+').allMatches(nameWithoutExt);
+    
+    if (numbers.isNotEmpty) {
+      // 优先使用最后一个数字（通常是页码）
+      final lastNumber = numbers.last.group(0);
+      return int.tryParse(lastNumber!) ?? 0;
+    }
+    
+    return 0;
   }
 
   void addToLocalFavoriteFolder(BuildContext context, DownloadPageLogic logic) {
