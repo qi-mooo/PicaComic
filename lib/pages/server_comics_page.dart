@@ -19,14 +19,48 @@ class ServerComicsPage extends StatefulWidget {
 class _ServerComicsPageState extends State<ServerComicsPage> {
   ServerClient? _client;
   List<ServerComicDetail> _comics = [];
+  List<ServerComicDetail> _baseComics = [];
   bool _isLoading = true;
   bool _isConnected = false;
   String? _error;
+  
+  // 搜索相关
+  bool _searchMode = false;
+  String _keyword = "";
+  String _keyword_ = "";
+  
+  // 排序相关 (0: 时间, 1: 名称, 2: 大小)
+  int _sortMode = 0;
+  bool _sortReverse = false;
 
   @override
   void initState() {
     super.initState();
+    _loadSortSettings();
     _initClient();
+  }
+  
+  void _loadSortSettings() {
+    // 从设置中加载排序模式 (使用 settings[92] 存储服务器漫画排序)
+    // 确保 settings 数组足够长
+    while (appdata.settings.length <= 92) {
+      appdata.settings.add("");
+    }
+    
+    if (appdata.settings[92].isNotEmpty) {
+      final parts = appdata.settings[92].split(',');
+      if (parts.isNotEmpty) _sortMode = int.tryParse(parts[0]) ?? 0;
+      if (parts.length > 1) _sortReverse = parts[1] == '1';
+    }
+  }
+  
+  void _saveSortSettings() {
+    // 确保 settings 数组足够长
+    while (appdata.settings.length <= 92) {
+      appdata.settings.add("");
+    }
+    appdata.settings[92] = '$_sortMode,${_sortReverse ? '1' : '0'}';
+    appdata.updateSettings();
   }
 
   Future<void> _initClient() async {
@@ -68,8 +102,9 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
     
     try {
       final response = await _client!.getComics();
+      _baseComics = response.comics;
+      _applyFiltersAndSort();
       setState(() {
-        _comics = response.comics;
         _isLoading = false;
         _error = null;
       });
@@ -80,25 +115,165 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
       });
     }
   }
+  
+  void _applyFiltersAndSort() {
+    // 1. 应用搜索过滤
+    if (_keyword.isEmpty) {
+      _comics = List.from(_baseComics);
+    } else {
+      _comics = _baseComics.where((comic) {
+        return comic.title.toLowerCase().contains(_keyword.toLowerCase()) ||
+               comic.author.toLowerCase().contains(_keyword.toLowerCase());
+      }).toList();
+    }
+    
+    // 2. 应用排序
+    _comics.sort((a, b) {
+      int result;
+      switch (_sortMode) {
+        case 0: // 时间
+          result = a.time.compareTo(b.time);
+          break;
+        case 1: // 名称
+          result = a.title.compareTo(b.title);
+          break;
+        case 2: // 大小
+          result = a.size.compareTo(b.size);
+          break;
+        default:
+          result = 0;
+      }
+      return _sortReverse ? -result : result;
+    });
+  }
+  
+  void _performSearch() {
+    if (_keyword == _keyword_) return;
+    _keyword_ = _keyword;
+    setState(() {
+      _applyFiltersAndSort();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('服务器漫画'.tl),
-        actions: [
-          IconButton(
-            icon: Icon(_isConnected ? Icons.cloud_done : Icons.cloud_off),
-            color: _isConnected ? Colors.green : Colors.grey,
-            onPressed: () => _showServerInfo(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _isConnected ? _loadComics : null,
-          ),
-        ],
+        title: _searchMode ? _buildSearchField() : Text('服务器漫画'.tl),
+        actions: _buildActions(),
       ),
       body: _buildBody(),
+    );
+  }
+  
+  Widget _buildSearchField() {
+    return TextField(
+      autofocus: true,
+      decoration: InputDecoration(
+        border: InputBorder.none,
+        hintText: "搜索".tl,
+      ),
+      onChanged: (s) {
+        _keyword = s.toLowerCase();
+        _performSearch();
+      },
+    );
+  }
+  
+  List<Widget> _buildActions() {
+    if (_searchMode) {
+      return [
+        IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () {
+            setState(() {
+              _searchMode = false;
+              _keyword = "";
+              _keyword_ = "";
+              _applyFiltersAndSort();
+            });
+          },
+        ),
+      ];
+    }
+    
+    return [
+      Tooltip(
+        message: "排序".tl,
+        child: IconButton(
+          icon: const Icon(Icons.sort),
+          onPressed: _showSortDialog,
+        ),
+      ),
+      Tooltip(
+        message: "搜索".tl,
+        child: IconButton(
+          icon: const Icon(Icons.search),
+          onPressed: () {
+            setState(() {
+              _searchMode = true;
+            });
+          },
+        ),
+      ),
+      IconButton(
+        icon: Icon(_isConnected ? Icons.cloud_done : Icons.cloud_off),
+        color: _isConnected ? Colors.green : Colors.grey,
+        onPressed: () => _showServerInfo(),
+      ),
+      IconButton(
+        icon: const Icon(Icons.refresh),
+        onPressed: _isConnected ? _loadComics : null,
+      ),
+    ];
+  }
+  
+  Future<void> _showSortDialog() async {
+    bool changed = false;
+    await showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text("漫画排序模式".tl),
+        children: [
+          SizedBox(
+            width: 400,
+            child: Column(
+              children: [
+                ListTile(
+                  title: Text("漫画排序模式".tl),
+                  trailing: Select(
+                    initialValue: _sortMode,
+                    onChange: (i) {
+                      setState(() {
+                        _sortMode = i;
+                        _saveSortSettings();
+                        _applyFiltersAndSort();
+                        changed = true;
+                      });
+                    },
+                    values: ["时间".tl, "名称".tl, "大小".tl],
+                    width: 156,
+                  ),
+                ),
+                ListTile(
+                  title: Text("倒序".tl),
+                  trailing: Switch(
+                    value: _sortReverse,
+                    onChanged: (b) {
+                      setState(() {
+                        _sortReverse = b;
+                        _saveSortSettings();
+                        _applyFiltersAndSort();
+                        changed = true;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
     );
   }
 
