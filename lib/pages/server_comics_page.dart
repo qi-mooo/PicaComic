@@ -232,47 +232,53 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
     bool changed = false;
     await showDialog(
       context: context,
-      builder: (context) => SimpleDialog(
-        title: Text("漫画排序模式".tl),
-        children: [
-          SizedBox(
-            width: 400,
-            child: Column(
-              children: [
-                ListTile(
-                  title: Text("漫画排序模式".tl),
-                  trailing: Select(
-                    initialValue: _sortMode,
-                    onChange: (i) {
-                      setState(() {
-                        _sortMode = i;
-                        _saveSortSettings();
-                        _applyFiltersAndSort();
-                        changed = true;
-                      });
-                    },
-                    values: ["时间".tl, "名称".tl, "大小".tl],
-                    width: 156,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => SimpleDialog(
+          title: Text("漫画排序模式".tl),
+          children: [
+            SizedBox(
+              width: 400,
+              child: Column(
+                children: [
+                  ListTile(
+                    title: Text("漫画排序模式".tl),
+                    trailing: Select(
+                      initialValue: _sortMode,
+                      onChange: (i) {
+                        setDialogState(() {
+                          setState(() {
+                            _sortMode = i;
+                            _saveSortSettings();
+                            _applyFiltersAndSort();
+                            changed = true;
+                          });
+                        });
+                      },
+                      values: ["时间".tl, "名称".tl, "大小".tl],
+                      width: 156,
+                    ),
                   ),
-                ),
-                ListTile(
-                  title: Text("倒序".tl),
-                  trailing: Switch(
-                    value: _sortReverse,
-                    onChanged: (b) {
-                      setState(() {
-                        _sortReverse = b;
-                        _saveSortSettings();
-                        _applyFiltersAndSort();
-                        changed = true;
-                      });
-                    },
+                  ListTile(
+                    title: Text("倒序".tl),
+                    trailing: Switch(
+                      value: _sortReverse,
+                      onChanged: (b) {
+                        setDialogState(() {
+                          setState(() {
+                            _sortReverse = b;
+                            _saveSortSettings();
+                            _applyFiltersAndSort();
+                            changed = true;
+                          });
+                        });
+                      },
+                    ),
                   ),
-                ),
-              ],
-            ),
-          )
-        ],
+                ],
+              ),
+            )
+          ],
+        ),
       ),
     );
   }
