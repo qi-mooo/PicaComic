@@ -184,6 +184,7 @@ extension ImageExt on ComicReadingPage {
           } else {
             logic.index = i;
             logic.update();
+            logic.update(["ToolBar"]);
           }
         },
       );
@@ -287,6 +288,7 @@ extension ImageExt on ComicReadingPage {
                 ? (i * 2 - 2).clamp(1, logic.urls.length)
                 : i * 2 - 1;
             logic.update();
+            logic.update(["ToolBar"]);
           }
         },
       );
