@@ -451,7 +451,14 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
                     child: FilledButton(
                       onPressed: () {
                         Navigator.pop(context);
-                        _showComicInfoDialog(comic);
+                        // 如果有在线详情且支持在客户端内打开，则打开在线详情页
+                        if (comic.detailUrl != null && 
+                            comic.detailUrl!.isNotEmpty && 
+                            _canOpenComicInApp(comic.type)) {
+                          _openComicDetailPage(comic);
+                        } else {
+                          _showComicInfoDialog(comic);
+                        }
                       },
                       child: Text("查看详情".tl),
                     ),
