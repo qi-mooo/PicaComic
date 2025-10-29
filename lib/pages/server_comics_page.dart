@@ -8,7 +8,10 @@ import 'package:pica_comic/network/server_client.dart';
 import 'package:pica_comic/pages/comic_page.dart';
 import 'package:pica_comic/pages/reader/comic_reading_page.dart';
 import 'package:pica_comic/tools/translations.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:pica_comic/pages/jm/jm_comic_page.dart';
+import 'package:pica_comic/pages/picacg/comic_page.dart';
+import 'package:pica_comic/pages/nhentai/comic_page.dart';
+import 'package:pica_comic/pages/htmanga/ht_comic_page.dart';
 
 class ServerComicsPage extends StatefulWidget {
   const ServerComicsPage({Key? key}) : super(key: key);
@@ -532,8 +535,9 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
   }
 
   void _showComicMenu(ServerComicDetail comic) {
-    // 如果有在线详情链接，直接使用在线详情
+    // 如果有在线详情，根据漫画源类型判断是否可以在客户端内打开
     final hasOnlineDetail = comic.detailUrl != null && comic.detailUrl!.isNotEmpty;
+    final canOpenInApp = _canOpenComicInApp(comic.type);
     
     showModalBottomSheet(
       context: context,
@@ -541,18 +545,24 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: Icon(hasOnlineDetail ? Icons.open_in_browser : Icons.info),
-              title: Text(hasOnlineDetail ? '查看在线详情'.tl : '详情'.tl),
-              onTap: () {
-                Navigator.pop(context);
-                if (hasOnlineDetail) {
-                  _openDetailUrl(comic.detailUrl!);
-                } else {
+            if (hasOnlineDetail && canOpenInApp)
+              ListTile(
+                leading: const Icon(Icons.book),
+                title: Text('查看在线详情'.tl),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openComicDetailPage(comic);
+                },
+              ),
+            if (!hasOnlineDetail || !canOpenInApp)
+              ListTile(
+                leading: const Icon(Icons.info),
+                title: Text('详情'.tl),
+                onTap: () {
+                  Navigator.pop(context);
                   _showComicInfoDialog(comic);
-                }
-              },
-            ),
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.delete),
               title: Text('删除'.tl),
@@ -567,16 +577,46 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
     );
   }
 
-  Future<void> _openDetailUrl(String url) async {
+  // 检查是否可以在客户端内打开
+  bool _canOpenComicInApp(String type) {
+    return ['jm', 'picacg', 'nhentai', 'htmanga'].contains(type);
+  }
+
+  // 在客户端内打开漫画详情页
+  void _openComicDetailPage(ServerComicDetail comic) {
     try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        showToast(message: '无法打开链接'.tl);
+      String actualId = comic.id;
+      
+      // 从 ID 中提取实际的漫画 ID
+      if (comic.type == 'jm' && actualId.startsWith('jm')) {
+        actualId = actualId.substring(2); // 移除 'jm' 前缀
+      } else if (comic.type == 'nhentai' && actualId.startsWith('nhentai')) {
+        actualId = actualId.substring(7); // 移除 'nhentai' 前缀
+      } else if (comic.type == 'htmanga' && actualId.startsWith('Ht')) {
+        actualId = actualId.substring(2); // 移除 'Ht' 前缀
+      } else if (comic.type == 'hitomi' && actualId.startsWith('hitomi')) {
+        actualId = actualId.substring(6); // 移除 'hitomi' 前缀
+      }
+      
+      // 根据类型跳转到对应的详情页
+      switch (comic.type) {
+        case 'jm':
+          context.to(() => JmComicPage(actualId));
+          break;
+        case 'picacg':
+          context.to(() => PicacgComicPage(actualId));
+          break;
+        case 'nhentai':
+          context.to(() => NhentaiComicPage(actualId));
+          break;
+        case 'htmanga':
+          context.to(() => HtComicPage(actualId));
+          break;
+        default:
+          showToast(message: '不支持的漫画源'.tl);
       }
     } catch (e) {
-      showToast(message: '打开链接失败: $e');
+      showToast(message: '打开详情页失败: $e');
     }
   }
 
