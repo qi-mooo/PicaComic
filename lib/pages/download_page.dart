@@ -1092,70 +1092,122 @@ class DownloadPage extends StatelessWidget {
     // 上传所有章节的图片
     print('[导出] 开始上传章节图片...');
     print('[导出] 已下载章节列表 (索引): ${comic.downloadedEps}');
+    print('[导出] 漫画类型: ${comic.type}');
     
-    for (int ep in comic.downloadedEps) {
-      final actualEp = ep + 1;  // downloadedEps 是索引(从0开始)，目录名是章节号(从1开始)
-      final epDir = Directory('$comicPath/$actualEp');
-      print('[导出] 检查章节索引 $ep -> 目录 $actualEp: ${epDir.path}');
+    // 检查是否是 EHentai（图片在根目录，不在章节子目录）
+    bool isEhentai = comic is DownloadedGallery;
+    
+    if (isEhentai) {
+      print('[导出] 检测到 EHentai 漫画，图片在根目录');
+      // EHentai 的图片直接在根目录，文件名格式为: 0.jpg, 1.jpg, 2.jpg...
+      final files = await Directory(comicPath).list().toList();
+      print('[导出] 根目录中共有 ${files.length} 个条目');
       
-      if (await epDir.exists()) {
-        print('[导出] ✓ 章节 $actualEp 目录存在');
-        final files = await epDir.list().toList();
-        print('[导出] 章节 $actualEp 目录中共有 ${files.length} 个条目');
+      // 对文件进行排序
+      final imageFiles = files
+          .whereType<File>()
+          .where((file) => _isImageFile(file.path) && !file.path.contains('cover'))
+          .toList();
+      
+      print('[导出] 过滤后有 ${imageFiles.length} 个图片文件');
+      
+      // 按文件名数字排序
+      imageFiles.sort((a, b) {
+        final aNum = _extractPageNumber(a.path);
+        final bNum = _extractPageNumber(b.path);
+        return aNum.compareTo(bNum);
+      });
+      
+      for (var file in imageFiles) {
+        final filename = file.path.split('/').last;
+        final pageNum = _extractPageNumber(file.path);
+        final ext = filename.split('.').last;
+        final uploadFilename = 'ep1_page${pageNum.toString().padLeft(3, '0')}.$ext';
         
-        // 列出所有文件用于调试
-        for (var file in files) {
-          if (file is File) {
-            print('[导出] 发现文件: ${file.path.split('/').last}');
+        print('[导出] 添加文件到队列: $uploadFilename (来源: $filename, 页码: $pageNum)');
+        
+        formData.files.add(MapEntry(
+          'files',
+          await MultipartFile.fromFile(
+            file.path,
+            filename: uploadFilename,
+          ),
+        ));
+        
+        uploadedFiles++;
+        
+        // 更新进度
+        if (totalFiles > 0 && uploadedFiles % 10 == 0) {
+          final progress = uploadedFiles / totalFiles;
+          print('[导出] 上传进度: ${(progress * 100).toStringAsFixed(1)}% ($uploadedFiles/$totalFiles)');
+        }
+      }
+    } else {
+      // 其他漫画源，章节在子目录中
+      for (int ep in comic.downloadedEps) {
+        final actualEp = ep + 1;  // downloadedEps 是索引(从0开始)，目录名是章节号(从1开始)
+        final epDir = Directory('$comicPath/$actualEp');
+        print('[导出] 检查章节索引 $ep -> 目录 $actualEp: ${epDir.path}');
+        
+        if (await epDir.exists()) {
+          print('[导出] ✓ 章节 $actualEp 目录存在');
+          final files = await epDir.list().toList();
+          print('[导出] 章节 $actualEp 目录中共有 ${files.length} 个条目');
+          
+          // 列出所有文件用于调试
+          for (var file in files) {
+            if (file is File) {
+              print('[导出] 发现文件: ${file.path.split('/').last}');
+            }
           }
-        }
-        
-        // 对文件进行排序，确保按正确顺序上传
-        final imageFiles = files
-            .whereType<File>()
-            .where((file) => _isImageFile(file.path))
-            .toList();
-        
-        print('[导出] 章节 $actualEp: 过滤后有 ${imageFiles.length} 个图片文件');
-        
-        if (imageFiles.isEmpty) {
-          print('[导出] ⚠️ 警告: 章节 $actualEp 没有找到任何图片文件！');
-          continue;
-        }
-        
-        // 按文件名排序
-        imageFiles.sort((a, b) {
-          final aNum = _extractPageNumber(a.path);
-          final bNum = _extractPageNumber(b.path);
-          return aNum.compareTo(bNum);
-        });
-        
-        for (var file in imageFiles) {
-          final filename = file.path.split('/').last;
-          final pageNum = _extractPageNumber(file.path);
-          final ext = filename.split('.').last;
-          final uploadFilename = 'ep${actualEp}_page${pageNum.toString().padLeft(3, '0')}.$ext';
           
-          print('[导出] 添加文件到队列: $uploadFilename (来源: $filename, 页码: $pageNum)');
+          // 对文件进行排序，确保按正确顺序上传
+          final imageFiles = files
+              .whereType<File>()
+              .where((file) => _isImageFile(file.path))
+              .toList();
           
-          formData.files.add(MapEntry(
-            'files',
-            await MultipartFile.fromFile(
-              file.path,
-              filename: uploadFilename,
-            ),
-          ));
+          print('[导出] 章节 $actualEp: 过滤后有 ${imageFiles.length} 个图片文件');
           
-          uploadedFiles++;
-          
-          // 更新进度
-          if (totalFiles > 0 && uploadedFiles % 10 == 0) { // 每10个文件打印一次
-            final progress = uploadedFiles / totalFiles;
-            print('[导出] 上传进度: ${(progress * 100).toStringAsFixed(1)}% ($uploadedFiles/$totalFiles)');
+          if (imageFiles.isEmpty) {
+            print('[导出] ⚠️ 警告: 章节 $actualEp 没有找到任何图片文件！');
+            continue;
           }
+          
+          // 按文件名排序
+          imageFiles.sort((a, b) {
+            final aNum = _extractPageNumber(a.path);
+            final bNum = _extractPageNumber(b.path);
+            return aNum.compareTo(bNum);
+          });
+          
+          for (var file in imageFiles) {
+            final filename = file.path.split('/').last;
+            final pageNum = _extractPageNumber(file.path);
+            final ext = filename.split('.').last;
+            final uploadFilename = 'ep${actualEp}_page${pageNum.toString().padLeft(3, '0')}.$ext';
+            
+            print('[导出] 添加文件到队列: $uploadFilename (来源: $filename, 页码: $pageNum)');
+            
+            formData.files.add(MapEntry(
+              'files',
+              await MultipartFile.fromFile(
+                file.path,
+                filename: uploadFilename,
+              ),
+            ));
+            
+            uploadedFiles++;
+            
+            // 更新进度
+            if (totalFiles > 0 && uploadedFiles % 10 == 0) { // 每10个文件打印一次
+              final progress = uploadedFiles / totalFiles;
+              print('[导出] 上传进度: ${(progress * 100).toStringAsFixed(1)}% ($uploadedFiles/$totalFiles)');
+            }
+          }
+        } else {
+          print('[导出] ✗ 错误: 章节目录不存在: ${epDir.path}');
         }
-      } else {
-        print('[导出] ✗ 错误: 章节目录不存在: ${epDir.path}');
       }
     }
     
