@@ -8,6 +8,7 @@ import 'package:pica_comic/network/server_client.dart';
 import 'package:pica_comic/pages/comic_page.dart';
 import 'package:pica_comic/pages/reader/comic_reading_page.dart';
 import 'package:pica_comic/tools/translations.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ServerComicsPage extends StatefulWidget {
   const ServerComicsPage({Key? key}) : super(key: key);
@@ -531,12 +532,27 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
   }
 
   void _showComicMenu(ServerComicDetail comic) {
+    // 如果有在线详情链接，直接使用在线详情
+    final hasOnlineDetail = comic.detailUrl != null && comic.detailUrl!.isNotEmpty;
+    
     showModalBottomSheet(
       context: context,
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              leading: Icon(hasOnlineDetail ? Icons.open_in_browser : Icons.info),
+              title: Text(hasOnlineDetail ? '查看在线详情'.tl : '详情'.tl),
+              onTap: () {
+                Navigator.pop(context);
+                if (hasOnlineDetail) {
+                  _openDetailUrl(comic.detailUrl!);
+                } else {
+                  _showComicInfoDialog(comic);
+                }
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.delete),
               title: Text('删除'.tl),
@@ -545,18 +561,23 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
                 _deleteComic(comic);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.info),
-              title: Text('详情'.tl),
-              onTap: () {
-                Navigator.pop(context);
-                _showComicInfoDialog(comic);
-              },
-            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _openDetailUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        showToast(message: '无法打开链接'.tl);
+      }
+    } catch (e) {
+      showToast(message: '打开链接失败: $e');
+    }
   }
 
   Future<void> _deleteComic(ServerComicDetail comic) async {
