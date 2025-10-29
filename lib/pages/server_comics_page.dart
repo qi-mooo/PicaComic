@@ -611,7 +611,7 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
           context.to(() => JmComicPage(actualId));
           break;
         case 'picacg':
-          context.to(() => PicacgComicPage(actualId));
+          context.to(() => PicacgComicPage(actualId, null));
           break;
         case 'nhentai':
           context.to(() => NhentaiComicPage(actualId));
