@@ -69,36 +69,25 @@ class HitomiComicPage extends BaseComicPage<HitomiComic> {
         context: App.globalContext!,
         builder: (context) => AlertDialog(
           title: Text("选择下载位置".tl),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.phone_android),
-                title: Text("本地设备".tl),
-                onTap: () {
-                  App.globalBack();
-                  _downloadComic(data!, this.context, cover!, link);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.cloud_upload),
-                title: Text("远程服务器".tl),
-                subtitle: Text(serverUrl),
-                onTap: () async {
-                  App.globalBack();
-                  try {
-                    await _downloadToServer(serverUrl);
-                  } catch (e) {
-                    showToast(message: "下载失败: $e");
-                  }
-                },
-              ),
-            ],
-          ),
+          content: Text("请选择下载到本地还是服务器".tl),
           actions: [
             TextButton(
-              onPressed: () => App.globalBack(),
-              child: Text("取消".tl),
+              onPressed: () {
+                Navigator.pop(context);
+                _downloadComic(data!, this.context, cover!, link);
+              },
+              child: Text("本地设备".tl),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                try {
+                  await _downloadToServer(serverUrl);
+                } catch (e) {
+                  showToast(message: "下载失败: $e");
+                }
+              },
+              child: Text("远程服务器".tl),
             ),
           ],
         ),
