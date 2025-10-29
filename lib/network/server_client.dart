@@ -506,12 +506,14 @@ class DirectEpisode {
   final String name;      // 章节名称
   final List<String> pageUrls; // 图片URL列表
   final Map<String, String>? headers; // HTTP请求头（可选）
+  final Map<String, String>? descrambleParams; // 反混淆参数（可选，用于JM等）
 
   DirectEpisode({
     required this.order,
     required this.name,
     required this.pageUrls,
     this.headers,
+    this.descrambleParams,
   });
 
   Map<String, dynamic> toJson() => {
@@ -519,5 +521,6 @@ class DirectEpisode {
     'name': name,
     'page_urls': pageUrls,
     if (headers != null) 'headers': headers,
+    if (descrambleParams != null) 'descramble_params': descrambleParams,
   };
 }

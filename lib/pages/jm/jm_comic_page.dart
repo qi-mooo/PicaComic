@@ -273,11 +273,18 @@ void downloadComic(JmComicInfo comic, BuildContext context) async {
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         };
         
+        // JM 反混淆参数
+        final descrambleParams = {
+          'epsId': chapterId.toString(),
+          'scrambleId': '220980',
+        };
+        
         episodes.add(DirectEpisode(
           order: chapterKey,
           name: epName,
           pageUrls: pagesRes.data,
           headers: imageHeaders,
+          descrambleParams: descrambleParams,
         ));
       }
       
