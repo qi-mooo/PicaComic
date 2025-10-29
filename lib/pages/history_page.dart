@@ -231,7 +231,7 @@ Future<void> _openServerComic(BuildContext context, History history) async {
   }
   
   try {
-    showLoadingDialog(context, () => Future.value());
+    showLoadingDialog(context, barrierDismissible: false, allowCancel: false);
     
     final client = ServerClient(serverUrl);
     final comic = await client.getComicDetail(history.target);
