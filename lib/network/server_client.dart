@@ -489,16 +489,19 @@ class DirectEpisode {
   final int order;        // 章节序号 (1-based)
   final String name;      // 章节名称
   final List<String> pageUrls; // 图片URL列表
+  final Map<String, String>? headers; // HTTP请求头（可选）
 
   DirectEpisode({
     required this.order,
     required this.name,
     required this.pageUrls,
+    this.headers,
   });
 
   Map<String, dynamic> toJson() => {
     'order': order,
     'name': name,
     'page_urls': pageUrls,
+    if (headers != null) 'headers': headers,
   };
 }
