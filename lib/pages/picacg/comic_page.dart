@@ -317,6 +317,7 @@ void _downloadComic(
                   "tags": comic.tags,           // 标签
                 },
                 description: comic.description,
+                detailUrl: "https://www.picacomic.com/comic/${comic.id}",
                 episodes: episodes,
               );
               
