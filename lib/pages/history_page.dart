@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:pica_comic/network/eh_network/eh_main_network.dart';
 import 'package:pica_comic/network/jm_network/jm_image.dart';
 import 'package:pica_comic/network/picacg_network/models.dart';
+import 'package:pica_comic/network/server_client.dart';
 import 'package:pica_comic/pages/comic_page.dart';
+import 'package:pica_comic/pages/reader/comic_reading_page.dart';
+import 'package:pica_comic/pages/reader/reading_data.dart';
 import 'package:pica_comic/tools/time.dart';
 import 'package:pica_comic/foundation/history.dart';
 import '../base.dart';
@@ -199,6 +202,12 @@ class _HistoryPageState extends State<HistoryPage> {
 }
 
 void toComicPageWithHistory(BuildContext context, History history) {
+  // 检查是否是服务器漫画（HistoryType == 99）
+  if (history.type.value == 99) {
+    _openServerComic(context, history);
+    return;
+  }
+  
   var source = history.type.comicSource;
   if (source == null) {
     showToast(message: "Comic Source Not Found");
@@ -211,4 +220,36 @@ void toComicPageWithHistory(BuildContext context, History history) {
       cover: history.cover,
     ),
   );
+}
+
+Future<void> _openServerComic(BuildContext context, History history) async {
+  final serverUrl = appdata.settings[90];
+  
+  if (serverUrl.isEmpty) {
+    showToast(message: '请先在设置中配置服务器地址'.tl);
+    return;
+  }
+  
+  try {
+    showLoadingDialog(context, () => Future.value());
+    
+    final client = ServerClient(serverUrl);
+    final comic = await client.getComicDetail(history.target);
+    
+    Navigator.pop(context); // 关闭加载对话框
+    
+    final readingData = ServerReadingData(
+      serverUrl: serverUrl,
+      comic: comic,
+    );
+    
+    // 使用历史记录中的位置
+    int initialPage = history.page > 0 ? history.page : 1;
+    int initialEp = history.ep > 0 ? history.ep : 1;
+    
+    context.to(() => ComicReadingPage(readingData, initialPage, initialEp));
+  } catch (e) {
+    Navigator.pop(context); // 确保关闭加载对话框
+    showToast(message: '打开失败: $e');
+  }
 }
