@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:pica_comic/base.dart';
 import 'package:pica_comic/components/components.dart';
 import 'package:pica_comic/foundation/app.dart';
+import 'package:pica_comic/foundation/history.dart';
 import 'package:pica_comic/network/server_client.dart';
 import 'package:pica_comic/pages/comic_page.dart';
 import 'package:pica_comic/pages/reader/comic_reading_page.dart';
@@ -474,13 +475,41 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
     );
   }
 
-  void _readComic(ServerComicDetail comic, int ep) {
+  Future<void> _readComic(ServerComicDetail comic, int ep) async {
     final readingData = ServerReadingData(
       serverUrl: _client!.serverUrl,
       comic: comic,
     );
     
-    App.globalTo(() => ComicReadingPage(readingData, 1, ep));
+    // 尝试从历史记录中获取或创建阅读进度
+    var history = HistoryManager().findSync(comic.id);
+    if (history == null) {
+      // 如果历史记录不存在，创建一个新的
+      history = History(
+        HistoryType(99), // 使用特殊类型表示服务器漫画
+        DateTime.now(),
+        comic.title,
+        '',
+        _client!.getComicCoverUrl(comic.id),
+        0,
+        0,
+        comic.id,
+        {},
+        null,
+      );
+      await HistoryManager().addHistory(history);
+    }
+    
+    int initialPage = 1;
+    int initialEp = ep;
+    
+    if (history.ep > 0) {
+      // 如果有阅读位置，使用历史记录中的位置
+      initialEp = history.ep;
+      initialPage = history.page;
+    }
+    
+    App.globalTo(() => ComicReadingPage(readingData, initialPage, initialEp));
   }
 
   void _showComicInfoDialog(ServerComicDetail comic) {
