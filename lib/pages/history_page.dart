@@ -5,7 +5,6 @@ import 'package:pica_comic/network/picacg_network/models.dart';
 import 'package:pica_comic/network/server_client.dart';
 import 'package:pica_comic/pages/comic_page.dart';
 import 'package:pica_comic/pages/reader/comic_reading_page.dart';
-import 'package:pica_comic/pages/reader/reading_data.dart';
 import 'package:pica_comic/tools/time.dart';
 import 'package:pica_comic/foundation/history.dart';
 import '../base.dart';
