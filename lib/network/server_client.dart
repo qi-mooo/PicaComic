@@ -125,10 +125,11 @@ class ServerClient {
     String cover = '',
     Map<String, List<String>> tags = const {},
     String description = '',
+    String? detailUrl,
     required List<DirectEpisode> episodes,
   }) async {
     try {
-      final response = await _dio.post('/api/download/direct', data: {
+      final data = {
         'comic_id': comicId,
         'type': source,
         'title': title,
@@ -137,7 +138,14 @@ class ServerClient {
         'tags': tags,
         'description': description,
         'episodes': episodes.map((e) => e.toJson()).toList(),
-      });
+      };
+      
+      // 只在有 detailUrl 时添加
+      if (detailUrl != null && detailUrl.isNotEmpty) {
+        data['detail_url'] = detailUrl;
+      }
+      
+      final response = await _dio.post('/api/download/direct', data: data);
       return response.data['task_id'];
     } catch (e) {
       throw ServerException('提交直接下载任务失败: $e');

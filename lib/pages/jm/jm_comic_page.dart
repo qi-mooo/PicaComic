@@ -283,6 +283,7 @@ void downloadComic(JmComicInfo comic, BuildContext context) async {
       
       // 发送到服务器
       final client = ServerClient(serverUrl);
+      final jmNetwork = JmNetwork();
       await client.submitDirectDownload(
         comicId: "jm${comic.id}",
         source: "jm",
@@ -291,6 +292,7 @@ void downloadComic(JmComicInfo comic, BuildContext context) async {
         cover: comic.cover,
         tags: {"tags": comic.tags},
         description: comic.description ?? "",
+        detailUrl: "${jmNetwork.baseUrl}/album?id=${comic.id}",
         episodes: episodes,
       );
       

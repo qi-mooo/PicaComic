@@ -136,6 +136,7 @@ class HitomiComicPage extends BaseComicPage<HitomiComic> {
         cover: cover!,
         tags: tagsMap,
         description: "",
+        detailUrl: link,
         episodes: episodes,
       );
 

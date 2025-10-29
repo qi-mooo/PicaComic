@@ -176,6 +176,7 @@ class NhentaiComicPage extends BaseComicPage<NhentaiComic> {
       // 发送到服务器
       final serverUrl = appdata.settings[90];
       final client = ServerClient(serverUrl);
+      final nhBaseUrl = NhentaiNetwork().baseUrl;
       await client.submitDirectDownload(
         comicId: "nhentai${data!.id}",
         source: "nhentai",
@@ -184,6 +185,7 @@ class NhentaiComicPage extends BaseComicPage<NhentaiComic> {
         cover: data!.cover,
         tags: data!.tags,
         description: "",
+        detailUrl: "$nhBaseUrl/g/${data!.id}/",
         episodes: episodes,
       );
       

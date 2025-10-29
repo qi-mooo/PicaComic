@@ -119,6 +119,7 @@ class HtComicPage extends BaseComicPage<HtComicInfo> {
       // 发送到服务器
       final serverUrl = appdata.settings[90];
       final client = ServerClient(serverUrl);
+      final htBaseUrl = HtmangaNetwork.baseUrl;
       await client.submitDirectDownload(
         comicId: "Ht${data!.id}",
         source: "htmanga",
@@ -127,6 +128,7 @@ class HtComicPage extends BaseComicPage<HtComicInfo> {
         cover: data!.cover,
         tags: {"tags": data!.tags.keys.toList()},
         description: "",
+        detailUrl: "$htBaseUrl/albums/${data!.id}.html",
         episodes: episodes,
       );
       
