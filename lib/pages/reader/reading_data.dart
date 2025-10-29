@@ -503,6 +503,7 @@ class ServerReadingData extends ReadingData {
   Stream<DownloadProgress> loadImageNetwork(int ep, int page, String url) async* {
     // 服务器漫画从服务器API获取图片
     // 注意：page参数从0开始，但服务器图片ID从1开始
+    // JM 漫画的图片已在服务器端进行了反混淆处理
     final client = ServerClient(serverUrl);
     final imageUrl = client.getComicPageUrl(comic.id, ep, page + 1);
     
