@@ -306,6 +306,7 @@ class ServerComicDetail {
   final List<String>? eps;
   final List<int>? downloadedEps;
   final String? directory;
+  final String? detailUrl;  // 详情页链接
 
   ServerComicDetail({
     required this.id,
@@ -323,6 +324,7 @@ class ServerComicDetail {
     this.eps,
     this.downloadedEps,
     this.directory,
+    this.detailUrl,  // 详情页链接
   });
 
   factory ServerComicDetail.fromJson(Map<String, dynamic> json) {
@@ -369,6 +371,7 @@ class ServerComicDetail {
             }).toList()
           : null,
       directory: json['directory'],
+      detailUrl: json['detail_url'],  // 详情页链接
     );
   }
 
