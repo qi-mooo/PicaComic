@@ -46,11 +46,6 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
   
   void _loadSortSettings() {
     // 从设置中加载排序模式 (使用 settings[92] 存储服务器漫画排序)
-    // 确保 settings 数组足够长
-    while (appdata.settings.length <= 92) {
-      appdata.settings.add("");
-    }
-    
     if (appdata.settings[92].isNotEmpty) {
       final parts = appdata.settings[92].split(',');
       if (parts.isNotEmpty) _sortMode = int.tryParse(parts[0]) ?? 0;
@@ -59,10 +54,6 @@ class _ServerComicsPageState extends State<ServerComicsPage> {
   }
   
   void _saveSortSettings() {
-    // 确保 settings 数组足够长
-    while (appdata.settings.length <= 92) {
-      appdata.settings.add("");
-    }
     appdata.settings[92] = '$_sortMode,${_sortReverse ? '1' : '0'}';
     appdata.updateSettings();
   }
