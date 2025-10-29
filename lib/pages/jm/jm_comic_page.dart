@@ -239,6 +239,11 @@ void downloadComic(JmComicInfo comic, BuildContext context) async {
 
     showLoadingDialog(App.globalContext!, allowCancel: false);
     try {
+      // 处理单章漫画（series 为空的情况）
+      if (comic.series.isEmpty) {
+        comic.series[1] = comic.id;
+      }
+      
       // 🆕 使用直接下载模式：拦截客户端获取的URL并发送到服务器
       final network = JmNetwork();
       final episodes = <DirectEpisode>[];
@@ -249,7 +254,10 @@ void downloadComic(JmComicInfo comic, BuildContext context) async {
         final epName = eps[idx];
         final chapterId = comic.series[chapterKey];
         
-        if (chapterId == null) continue;
+        if (chapterId == null) {
+          print('[JM下载] 警告: 章节 $chapterKey 没有对应的 chapterId');
+          continue;
+        }
         
         // 获取这个章节的图片URL
         final pagesRes = await network.getChapter(chapterId);
