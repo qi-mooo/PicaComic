@@ -282,12 +282,18 @@ void downloadComic(JmComicInfo comic, BuildContext context) async {
         
         // 为每个图片计算 bookId（调用现有逻辑）
         final pageDescrambleParams = <Map<String, String>>[];
-        for (var url in pagesRes.data) {
+        for (var i = 0; i < pagesRes.data.length; i++) {
+          final url = pagesRes.data[i];
           final bookId = extractBookIdFromUrl(url);
           pageDescrambleParams.add({
             'bookId': bookId,
           });
+          // 只打印前3个和后3个，避免日志过多
+          if (i < 3 || i >= pagesRes.data.length - 3) {
+            print('[JM下载] 图片 ${i+1}: URL=$url, bookId=$bookId');
+          }
         }
+        print('[JM下载] 章节 $epName: epsId=$chapterId, 共 ${pagesRes.data.length} 张图片');
         
         episodes.add(DirectEpisode(
           order: chapterKey,
