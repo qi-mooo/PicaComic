@@ -262,10 +262,12 @@ extension ToolBar on ComicReadingPage {
             logic.jumpToPage(i.toInt());
             logic.index = i.toInt();
             logic.update();
+            logic.update(["ToolBar"]);
           } else {
             logic.index = i.toInt();
             logic.jumpToPage(i.toInt());
             logic.update();
+            logic.update(["ToolBar"]);
           }
         },
       );
