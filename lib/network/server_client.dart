@@ -46,7 +46,8 @@ class ServerClient {
   /// 获取漫画详情
   Future<ServerComicDetail> getComicDetail(String id) async {
     try {
-      final response = await _dio.get('/api/comics/$id');
+      final encodedId = Uri.encodeComponent(id);
+      final response = await _dio.get('/api/comics/$encodedId');
       return ServerComicDetail.fromJson(response.data);
     } catch (e) {
       throw ServerException('获取漫画详情失败: $e');
@@ -55,18 +56,21 @@ class ServerClient {
 
   /// 获取漫画封面 URL
   String getComicCoverUrl(String id) {
-    return '$serverUrl/api/comics/$id/cover';
+    final encodedId = Uri.encodeComponent(id);
+    return '$serverUrl/api/comics/$encodedId/cover';
   }
 
   /// 获取漫画图片 URL
   String getComicPageUrl(String id, int ep, int page) {
-    return '$serverUrl/api/comics/$id/$ep/$page';
+    final encodedId = Uri.encodeComponent(id);
+    return '$serverUrl/api/comics/$encodedId/$ep/$page';
   }
 
   /// 获取章节的页面数量
   Future<int> getEpisodePageCount(String id, int ep) async {
     try {
-      final response = await _dio.get('/api/comics/$id/$ep/info');
+      final encodedId = Uri.encodeComponent(id);
+      final response = await _dio.get('/api/comics/$encodedId/$ep/info');
       return response.data['page_count'] as int;
     } catch (e) {
       throw ServerException('获取章节页面数量失败: $e');
@@ -76,7 +80,8 @@ class ServerClient {
   /// 删除漫画
   Future<void> deleteComic(String id) async {
     try {
-      await _dio.delete('/api/comics/$id');
+      final encodedId = Uri.encodeComponent(id);
+      await _dio.delete('/api/comics/$encodedId');
     } catch (e) {
       throw ServerException('删除漫画失败: $e');
     }
