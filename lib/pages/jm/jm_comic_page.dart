@@ -14,6 +14,7 @@ import 'package:pica_comic/tools/translations.dart';
 
 import '../../foundation/app.dart';
 import '../../foundation/history.dart';
+import '../../foundation/image_loader/image_recombine.dart';
 import '../../foundation/local_favorites.dart';
 import '../../foundation/ui_mode.dart';
 import '../../network/download.dart';
@@ -273,11 +274,20 @@ void downloadComic(JmComicInfo comic, BuildContext context) async {
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         };
         
-        // JM 反混淆参数
+        // JM 反混淆参数（全局）
         final descrambleParams = {
           'epsId': chapterId.toString(),
           'scrambleId': '220980',
         };
+        
+        // 为每个图片计算 bookId（调用现有逻辑）
+        final pageDescrambleParams = <Map<String, String>>[];
+        for (var url in pagesRes.data) {
+          final bookId = extractBookIdFromUrl(url);
+          pageDescrambleParams.add({
+            'bookId': bookId,
+          });
+        }
         
         episodes.add(DirectEpisode(
           order: chapterKey,
@@ -285,6 +295,7 @@ void downloadComic(JmComicInfo comic, BuildContext context) async {
           pageUrls: pagesRes.data,
           headers: imageHeaders,
           descrambleParams: descrambleParams,
+          pageDescrambleParams: pageDescrambleParams,
         ));
       }
       

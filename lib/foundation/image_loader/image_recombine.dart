@@ -214,3 +214,22 @@ Future<Uint8List> startRecombineAndWriteImage(Uint8List imgData, String epsId,
     String scrambleId, String bookId, String savePath) {
   return JmRecombine.recombineImage(imgData, epsId, scrambleId, bookId, savePath);
 }
+
+/// 计算 JM 图片的反混淆分割数（用于服务器下载时预先计算）
+int getJmSegmentationNum(String epsId, String scrambleId, String bookId) {
+  return _getSegmentationNum(epsId, scrambleId, bookId);
+}
+
+/// 从 URL 提取 bookId（与阅读器逻辑一致）
+String extractBookIdFromUrl(String url) {
+  var bookId = "";
+  for (int i = url.length - 1; i >= 0; i--) {
+    if (url[i] == '/') {
+      bookId = url.substring(i + 1, url.length - 5);
+      break;
+    }
+  }
+  // 移除 . 之后的内容
+  bookId = bookId.replaceAll(RegExp(r"\..+"), "");
+  return bookId;
+}
