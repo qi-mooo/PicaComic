@@ -336,6 +336,18 @@ class EhNetwork {
     if (leaderboard) {
       t++;
     }
+    // 强制 Extended 显示模式
+
+    try {
+      cookieJar.saveFromResponse(
+          Uri.parse(ehBaseUrl), [Cookie("sl", "dm_2")]);
+    } catch (_) {}
+    // 已登录: 账号设置优先于 cookie, 在 URL 附加 inline_set=dm_e 修改账号设置;
+    // 服务器处理后 302 跳回原地址(保留其余参数), request 跟随跳转后即为 Extended 布局.
+    // 排行榜页(toplist)不支持该参数(直接 200), 无需附加.
+    if (!leaderboard) {
+      url += "${url.contains('?') ? '&' : '?'}inline_set=dm_e";
+    }
     var res = await request(url, expiredTime: CacheExpiredTime.no);
     if (res.error) {
       return Res(null, errorMessage: res.errorMessage);
@@ -407,8 +419,12 @@ class EhNetwork {
                   ?.text
                   .nums ??
               "");
+          final tags = item
+              .querySelectorAll('div.gt, div.gtl')
+              .map((e) => e.attributes["title"] ?? "")
+              .toList();
           galleries.add(EhGalleryBrief(
-              title, type, time, "", coverPath, stars, link, [],
+              title, type, time, "", coverPath, stars, link, tags,
               pages: pages));
         } catch (e) {
           //忽视
@@ -490,8 +506,12 @@ class EhNetwork {
                   "");
           final link =
               item.querySelector("td.gl3m > a")?.attributes["href"] ?? "";
+          final tags = item
+              .querySelectorAll('div.gt, div.gtl')
+              .map((e) => e.attributes["title"] ?? "")
+              .toList();
           galleries.add(EhGalleryBrief(
-              title, type, time, uploader, coverPath!, stars, link, []));
+              title, type, time, uploader, coverPath!, stars, link, tags));
         } catch (e) {
           //忽视
         }

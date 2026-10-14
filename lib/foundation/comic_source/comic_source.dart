@@ -65,6 +65,10 @@ typedef SendChapterCommentFunc = Future<Res<bool>> Function(
 typedef LikeCommentFunc = Future<Res<int?>> Function(
     String comicId, String? subId, String commentId, bool isLiking);
 
+/// [isLiking] is true if the user is liking the comic, false if unliking.
+typedef LikeComicFunc = Future<Res<void>> Function(
+    String comicId, bool isLiking);
+
 /// [isUp] is true if the user is upvoting the comment, false if downvoting.
 /// return the new vote count or null.
 typedef VoteCommentFunc = Future<Res<int?>> Function(
@@ -216,6 +220,8 @@ class ComicSource {
 
   final LikeCommentFunc? likeCommentFunc;
 
+  final LikeComicFunc? likeComicFunc;
+
   final VoteCommentFunc? voteCommentFunc;
 
   final RegExp? idMatcher;
@@ -305,6 +311,7 @@ class ComicSource {
         chapterCommentsLoader = null,
         sendChapterCommentFunc = null,
         likeCommentFunc = null,
+        likeComicFunc = null,
         voteCommentFunc = null;
 
   ComicSource.named({
@@ -331,6 +338,7 @@ class ComicSource {
     this.chapterCommentsLoader,
     this.sendChapterCommentFunc,
     this.likeCommentFunc,
+    this.likeComicFunc,
     this.voteCommentFunc,
     this.initData,
     this.comicTileBuilderOverride,
@@ -364,6 +372,7 @@ class ComicSource {
         chapterCommentsLoader = null,
         sendChapterCommentFunc = null,
         likeCommentFunc = null,
+        likeComicFunc = null,
         voteCommentFunc = null,
         initData = null,
         comicTileBuilderOverride = null,
@@ -738,24 +747,40 @@ class ComicInfoData with HistoryMixin {
 
   final int? pages;
 
-  const ComicInfoData(
-      this.title,
-      this.subTitle,
-      this.cover,
-      this.description,
-      this.tags,
-      this.chapters,
-      this.thumbnails,
-      this.thumbnailLoader,
-      this.thumbnailMaxPage,
-      this.suggestions,
-      this.sourceKey,
-      this.comicId,
-      {this.isFavorite,
-      this.subId,
-      this.stars,
-      this.uploader,
-      this.pages});
+  /// likes count of the comic (JS sources)
+  int? likesCount;
+
+  /// whether current user liked the comic (JS sources)
+  bool? isLiked;
+
+  /// comments count of the comic (JS sources)
+  int? commentsCount;
+
+  /// url of the comic page on the source website (JS sources)
+  final String? url;
+
+  ComicInfoData(
+    this.title,
+    this.subTitle,
+    this.cover,
+    this.description,
+    this.tags,
+    this.chapters,
+    this.thumbnails,
+    this.thumbnailLoader,
+    this.thumbnailMaxPage,
+    this.suggestions,
+    this.sourceKey,
+    this.comicId, {
+    this.isFavorite,
+    this.subId,
+    this.stars,
+    this.uploader,
+    this.pages,
+    this.likesCount,
+    this.isLiked,
+    this.commentsCount,
+    this.url});
 
   Map<String, dynamic> toJson() {
     return {
@@ -772,6 +797,10 @@ class ComicInfoData with HistoryMixin {
       "stars": stars,
       "uploader": uploader?.toJson(),
       "pages": pages,
+      "likesCount": likesCount,
+      "isLiked": isLiked,
+      "commentsCount": commentsCount,
+      "url": url,
     };
   }
 
@@ -806,7 +835,19 @@ class ComicInfoData with HistoryMixin {
         },
         uploader = json["uploader"] is Map
             ? UploaderInfo.fromJson(Map<String, dynamic>.from(json["uploader"]))
-            : null;
+            : null,
+        likesCount = switch (json["likesCount"]) {
+          num value when value.isFinite => value.toInt(),
+          String value => int.tryParse(value),
+          _ => null,
+        },
+        isLiked = json["isLiked"] is bool ? json["isLiked"] : null,
+        commentsCount = switch (json["commentsCount"]) {
+          num value when value.isFinite => value.toInt(),
+          String value => int.tryParse(value),
+          _ => null,
+        },
+        url = json["url"] is String ? json["url"] : null;
 
   @override
   HistoryType get historyType => HistoryType(sourceKey.hashCode);

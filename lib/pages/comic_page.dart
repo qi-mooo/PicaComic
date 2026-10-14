@@ -84,6 +84,9 @@ class _ComicPageImpl extends BaseComicPage<ComicInfoData> {
   String? get cover => comicCover ?? data?.cover;
 
   @override
+  String? get url => data?.url;
+
+  @override
   void download() async {
     final downloadId = DownloadManager().generateId(sourceKey, id);
     final eps = data!.chapters?.titles.toList();
@@ -548,6 +551,9 @@ class _ComicPageImpl extends BaseComicPage<ComicInfoData> {
   String? get title => data?.title;
 
   @override
+  String? get subTitle => data?.subTitle;
+
+  @override
   FavoriteItem toLocalFavoriteItem() {
     var tags = <String>[];
     data!.tags.forEach((key, value) => tags.addAll(value));
@@ -689,6 +695,34 @@ class _ComicPageImpl extends BaseComicPage<ComicInfoData> {
       : null;
 
   @override
+  String? get commentsCount => data?.commentsCount?.toString();
+
+  @override
+  ActionFunc? get onLike => comicSource?.likeComicFunc == null
+      ? null
+      : () async {
+          final liked = data?.isLiked ?? false;
+          final res = await comicSource!.likeComicFunc!(id, !liked);
+          if (res.error) {
+            showToast(message: res.errorMessage ?? "网络错误".tl);
+            return;
+          }
+          if (data != null) {
+            data!.isLiked = !liked;
+            if (data!.likesCount != null) {
+              data!.likesCount = data!.likesCount! + (liked ? -1 : 1);
+            }
+            update();
+          }
+        };
+
+  @override
+  bool get isLiked => data?.isLiked ?? false;
+
+  @override
+  String? get likeCount => data?.likesCount?.toString();
+
+  @override
   String get downloadedId => downloadManager.generateId(comicSource!.key, id);
 }
 
@@ -784,8 +818,10 @@ class _CommentsPageState extends State<_CommentsPage> {
 
                 bool enableReply = _comments![index].replyCount != null;
 
+                var comment = _comments![index];
+
                 return CommentTile(
-                  leading: _comments![index].avatar == null
+                  leading: comment.avatar == null
                       ? null
                       : Container(
                           width: 40,
@@ -799,18 +835,27 @@ class _CommentsPageState extends State<_CommentsPage> {
                           child: AnimatedImage(
                             image: StreamImageProvider(
                               () => ImageManager().getCustomThumbnail(
-                                _comments![index].avatar!,
+                                comment.avatar!,
                                 widget.data.sourceKey,
                               ),
-                              _comments![index].avatar!,
+                              comment.avatar!,
                             ),
                           ),
                         ),
                   avatarUrl: null,
-                  name: _comments![index].userName,
-                  time: _comments![index].time,
-                  content: _comments![index].content,
-                  comments: _comments![index].replyCount,
+                  name: comment.userName,
+                  time: comment.time,
+                  content: comment.content,
+                  comments: comment.replyCount,
+                  tailing: comment.score != null &&
+                          widget.source.voteCommentFunc != null
+                      ? _CommentVoteActions(
+                          source: widget.source,
+                          comicId: widget.data.comicId,
+                          subId: widget.data.subId,
+                          comment: comment,
+                        )
+                      : null,
                   onTap: enableReply
                       ? () {
                           showSideBar(
@@ -818,7 +863,7 @@ class _CommentsPageState extends State<_CommentsPage> {
                             _CommentsPage(
                               data: widget.data,
                               source: widget.source,
-                              replyId: _comments![index].id,
+                              replyId: comment.id,
                             ),
                             title: "回复".tl,
                           );
@@ -916,6 +961,124 @@ class _CommentsPageState extends State<_CommentsPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+///  漫画源评论投票
+class _CommentVoteActions extends StatefulWidget {
+  const _CommentVoteActions({
+    required this.source,
+    required this.comicId,
+    required this.subId,
+    required this.comment,
+  });
+
+  final ComicSource source;
+  final String comicId;
+  final String? subId;
+  final Comment comment;
+
+  @override
+  State<_CommentVoteActions> createState() => _CommentVoteActionsState();
+}
+
+class _CommentVoteActionsState extends State<_CommentVoteActions> {
+  int? voteStatus;
+  bool isVotingUp = false;
+  bool isVotingDown = false;
+
+  @override
+  void initState() {
+    voteStatus = widget.comment.voteStatus;
+    super.initState();
+  }
+
+  void vote(bool isUp) async {
+    if (isVotingUp || isVotingDown) return;
+    setState(() {
+      if (isUp) {
+        isVotingUp = true;
+      } else {
+        isVotingDown = true;
+      }
+    });
+    var isCancel = (isUp && voteStatus == 1) || (!isUp && voteStatus == -1);
+    var res = await widget.source.voteCommentFunc!(
+      widget.comicId,
+      widget.subId,
+      widget.comment.id!,
+      isUp,
+      isCancel,
+    );
+    if (res.success) {
+      if (isCancel) {
+        voteStatus = 0;
+      } else {
+        if (isUp) {
+          voteStatus = 1;
+        } else {
+          voteStatus = -1;
+        }
+      }
+      widget.comment.voteStatus = voteStatus;
+      widget.comment.score = res.data ?? widget.comment.score;
+    } else {
+      context.showMessage(message: res.errorMessage ?? "Error");
+    }
+    setState(() {
+      isVotingUp = false;
+      isVotingDown = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Color voteColor(MaterialColor color) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      return isDark ? color[100]! : color[800]!;
+    }
+
+    var upColor = Theme.of(context).colorScheme.outline;
+    if (voteStatus == 1) {
+      upColor = voteColor(Colors.red);
+    }
+    var downColor = Theme.of(context).colorScheme.outline;
+    if (voteStatus == -1) {
+      downColor = voteColor(Colors.blue);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(left: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          width: 0.6,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Button.icon(
+            isLoading: isVotingUp,
+            icon: const Icon(Icons.arrow_upward),
+            size: 18,
+            color: upColor,
+            onPressed: () => vote(true),
+          ),
+          const SizedBox(width: 4),
+          Text(widget.comment.score.toString()),
+          const SizedBox(width: 4),
+          Button.icon(
+            isLoading: isVotingDown,
+            icon: const Icon(Icons.arrow_downward),
+            size: 18,
+            color: downColor,
+            onPressed: () => vote(false),
+          ),
+        ],
       ),
     );
   }

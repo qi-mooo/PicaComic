@@ -329,12 +329,16 @@ class JsEngine with _JSEngineApi{
 mixin class _JSEngineApi{
   final Map<int, dom.Document> _documents = {};
   final Map<int, dom.Element> _elements = {};
+  final Map<int, dom.Node> _nodes = {};
   CookieJarSql? _cookieJar;
 
   dynamic handleHtmlCallback(Map<String, dynamic> data) {
     switch (data["function"]) {
       case "parse":
         _documents[data["key"]] = html.parse(data["data"]);
+        return null;
+      case "dispose":
+        _documents.remove(data["key"]);
         return null;
       case "querySelector":
         var res = _documents[data["key"]]!.querySelector(data["query"]);
@@ -374,6 +378,52 @@ mixin class _JSEngineApi{
           keys.add(_elements.length - 1);
         }
         return keys;
+      case "getNodes":
+        var res = _elements[data["key"]]!.nodes;
+        var keys = <int>[];
+        for (var node in res) {
+          _nodes[_nodes.length] = node;
+          keys.add(_nodes.length - 1);
+        }
+        return keys;
+      case "getParent":
+        var res = _elements[data["key"]]!.parent;
+        if (res == null) return null;
+        _elements[_elements.length] = res;
+        return _elements.length - 1;
+      case "getPreviousSibling":
+        var res = _elements[data["key"]]!.previousElementSibling;
+        if (res == null) return null;
+        _elements[_elements.length] = res;
+        return _elements.length - 1;
+      case "getNextSibling":
+        var res = _elements[data["key"]]!.nextElementSibling;
+        if (res == null) return null;
+        _elements[_elements.length] = res;
+        return _elements.length - 1;
+      case "getClassNames":
+        return _elements[data["key"]]!.classes.toList();
+      case "getId":
+        return _elements[data["key"]]!.id;
+      case "getLocalName":
+        return _elements[data["key"]]!.localName;
+      case "node_text":
+        return _nodes[data["key"]]!.text;
+      case "node_type":
+        return switch (_nodes[data["key"]]!.nodeType) {
+          dom.Node.ELEMENT_NODE => "element",
+          dom.Node.TEXT_NODE => "text",
+          dom.Node.COMMENT_NODE => "comment",
+          dom.Node.DOCUMENT_NODE => "document",
+          _ => "unknown",
+        };
+      case "node_toElement":
+        var node = _nodes[data["key"]]!;
+        if (node is dom.Element) {
+          _elements[_elements.length] = node;
+          return _elements.length - 1;
+        }
+        return null;
       case "getElementById":
         var res = _documents[data["key"]]!.getElementById(data["id"]);
         if(res == null) return null;
@@ -428,6 +478,7 @@ mixin class _JSEngineApi{
   void clear(){
     _documents.clear();
     _elements.clear();
+    _nodes.clear();
   }
 
   void clearCookies(List<String> domains) async{

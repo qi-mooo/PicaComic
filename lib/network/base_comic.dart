@@ -39,6 +39,7 @@ class CustomComic extends BaseComic {
 
   final int? pages;
   final String? language;
+  final double? stars;
 
   const CustomComic(
     this.title,
@@ -50,6 +51,7 @@ class CustomComic extends BaseComic {
     this.sourceKey, {
     this.pages,
     this.language,
+    this.stars,
   });
 
   CustomComic.fromJson(Map json, this.sourceKey)
@@ -63,6 +65,11 @@ class CustomComic extends BaseComic {
         pages = switch (json["pages"] ?? json["maxPage"]) {
           num value when value.isFinite => value.toInt(),
           String value => int.tryParse(value),
+          _ => null,
+        },
+        stars = switch (json["stars"]) {
+          num value when value.isFinite => value.toDouble(),
+          String value => double.tryParse(value),
           _ => null,
         };
 }

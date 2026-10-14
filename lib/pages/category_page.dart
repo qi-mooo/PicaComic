@@ -8,6 +8,7 @@ import 'package:pica_comic/pages/ranking_page.dart';
 import 'package:pica_comic/pages/search_result_page.dart';
 import 'package:pica_comic/utils/tags_translation.dart';
 import 'package:pica_comic/pages/category_comics_page.dart';
+import 'package:pica_comic/pages/comic_page.dart';
 import 'package:pica_comic/pages/picacg/collections_page.dart';
 import 'package:pica_comic/base.dart';
 import 'package:pica_comic/utils/translations.dart';
@@ -273,7 +274,13 @@ class CategoryPage extends StatelessWidget {
           runSpacing: 8,
           children: [
             for (var buttonData in data.buttons)
-              buildTag(buttonData.label.tl, (p0, p1) => buttonData.onTap()),
+              buildTag(buttonData.label.tl, (p0, p1) {
+                if (buttonData.onTap != null) {
+                  buttonData.onTap!();
+                } else if (buttonData.action != null) {
+                  handleButtonAction(buttonData.action!);
+                }
+              }),
             if (data.buttons.isEmpty && findComicSourceKey() == "picacg")
               buildTag("推荐".tl, (p0, p1) {
                 context.to(() => const CollectionsPage());
@@ -473,6 +480,18 @@ class CategoryPage extends StatelessWidget {
             category: category,
             categoryKey: categoryKey,
             param: param,
+          ));
+    }
+  }
+
+  /// Handle data-driven button actions from JS comic sources
+  void handleButtonAction(Map<String, dynamic> action) {
+    var page = action["page"];
+    if (page == "comic") {
+      var id = action["id"] ?? "";
+      App.mainNavigatorKey?.currentContext?.to(() => ComicPage(
+            sourceKey: findComicSourceKey(),
+            id: id.toString(),
           ));
     }
   }

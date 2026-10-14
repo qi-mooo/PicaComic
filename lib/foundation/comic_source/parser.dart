@@ -97,6 +97,14 @@ class ComicSourceParser {
     var minAppVersion = JsEngine().runCode("this['temp'].minAppVersion");
     var url = JsEngine().runCode("this['temp'].url");
     var matchBriefIdRegex = JsEngine().runCode("this['temp'].comic.matchBriefIdRegex");
+    var idMatcherStr = JsEngine().runCode("this['temp'].idMatcher") ??
+        JsEngine().runCode("this['temp'].comic?.idMatcher");
+    RegExp? idMatcher;
+    if (idMatcherStr is String && idMatcherStr.isNotEmpty) {
+      try {
+        idMatcher = RegExp(idMatcherStr);
+      } catch (_) {}
+    }
     // Check for enableTagsTranslate at root level or in comic config (Venera compatibility)
     var enableTagsTranslate = JsEngine().runCode("this['temp'].enableTagsTranslate") ?? 
                               JsEngine().runCode("this['temp'].comic?.enableTagsTranslate") ?? 
@@ -155,8 +163,12 @@ class ComicSourceParser {
         sendCommentFunc: sendCommentFunc,
         chapterCommentsLoader: chapterCommentsLoader,
         sendChapterCommentFunc: sendChapterCommentFunc,
+        likeCommentFunc: _parseLikeCommentFunc(),
+        likeComicFunc: _parseLikeComicFunc(),
+        voteCommentFunc: _parseVoteCommentFunc(),
         enableTagsTranslate: enableTagsTranslate,
-        veneraSettings: veneraSettings);
+        veneraSettings: veneraSettings,
+        idMatcher: idMatcher);
 
     await source.loadData();
 
@@ -644,11 +656,27 @@ class ComicSourceParser {
       }
     }
 
+    var buttons = <CategoryButtonData>[];
+    var buttonList = doc["buttons"];
+    if (buttonList != null && buttonList is List) {
+      for (var b in buttonList) {
+        if (b is! Map) continue;
+        var label = b["label"];
+        var action = b["action"];
+        if (label is! String || label.isEmpty || action is! Map) continue;
+        buttons.add(CategoryButtonData(
+          label: label,
+          action: Map<String, dynamic>.from(action),
+        ));
+      }
+    }
+
     return CategoryData(
         title: title,
         categories: categoryParts,
         enableRankingPage: enableRankingPage ?? false,
-        key: _key == "jm" ? _key! : doc["key"] ?? title);
+        key: _key == "jm" ? _key! : doc["key"] ?? title,
+        buttons: buttons);
   }
 
   CategoryComicsData? _loadCategoryComicsData() {
@@ -970,7 +998,9 @@ class ComicSourceParser {
             : null;
         return Res(ComicInfoData(
             res["title"] ?? "",
-            res["subTitle"] ?? "",
+            // "subtitle" ( assets/init.js),
+            // "subTitle"
+            res["subTitle"] ?? res["subtitle"] ?? "",
             res["cover"] ?? "",
             res["description"] ?? "",
             tags,
@@ -989,6 +1019,18 @@ class ComicSourceParser {
               String value => int.tryParse(value),
               _ => null,
             },
+            likesCount: switch (res["likesCount"]) {
+              num value when value.isFinite => value.toInt(),
+              String value => int.tryParse(value),
+              _ => null,
+            },
+            isLiked: res["isLiked"] is bool ? res["isLiked"] : null,
+            commentsCount: switch (res["commentsCount"]) {
+              num value when value.isFinite => value.toInt(),
+              String value => int.tryParse(value),
+              _ => null,
+            },
+            url: res["url"] is String ? res["url"] : null,
             uploader: uploader));
       } catch (e, s) {
         log("$e\n$s", "Network", LogLevel.error);
@@ -1218,10 +1260,17 @@ class ComicSourceParser {
                         RegExp(r'</(?:p|div)>', caseSensitive: false), '\n'))
                     .text ?? '';
               }
+              var avatar = e["avatar"];
+              if (avatar is String && avatar.isEmpty) {
+                avatar = null;
+              }
               return Comment(
-                  e["userName"] ?? "", e["avatar"] ?? "", content,
-                  e["time"] ?? "", e["replyCount"] ?? 0,
-                  e["id"]?.toString() ?? "");
+                  e["userName"] ?? "", avatar, content,
+                  e["time"] ?? "", e["replyCount"],
+                  e["id"]?.toString() ?? "",
+                  score: e["score"],
+                  isLiked: e["isLiked"],
+                  voteStatus: e["voteStatus"]);
             }).toList(),
             subData: res["maxPage"]);
       } catch (e, s) {
@@ -1256,6 +1305,51 @@ class ComicSourceParser {
         }
       }
       return res;
+    };
+  }
+
+  VoteCommentFunc? _parseVoteCommentFunc() {
+    if (!_checkExists("comic.voteComment")) return null;
+    return (id, subId, commentId, isUp, isCancel) async {
+      try {
+        var res = await JsEngine().runCode("""
+          ComicSource.sources.$_key.comic.voteComment(${jsonEncode(id)}, ${jsonEncode(subId)}, ${jsonEncode(commentId)}, ${jsonEncode(isUp)}, ${jsonEncode(isCancel)})
+        """);
+        return Res(res is num ? res.toInt() : null);
+      } catch (e, s) {
+        log("$e\n$s", "Network", LogLevel.error);
+        return Res.error(e.toString());
+      }
+    };
+  }
+
+  LikeCommentFunc? _parseLikeCommentFunc() {
+    if (!_checkExists("comic.likeComment")) return null;
+    return (id, subId, commentId, isLiking) async {
+      try {
+        var res = await JsEngine().runCode("""
+          ComicSource.sources.$_key.comic.likeComment(${jsonEncode(id)}, ${jsonEncode(subId)}, ${jsonEncode(commentId)}, ${jsonEncode(isLiking)})
+        """);
+        return Res(res is num ? res.toInt() : null);
+      } catch (e, s) {
+        log("$e\n$s", "Network", LogLevel.error);
+        return Res.error(e.toString());
+      }
+    };
+  }
+
+  LikeComicFunc? _parseLikeComicFunc() {
+    if (!_checkExists("comic.likeComic")) return null;
+    return (id, isLiking) async {
+      try {
+        await JsEngine().runCode("""
+          ComicSource.sources.$_key.comic.likeComic(${jsonEncode(id)}, ${jsonEncode(isLiking)})
+        """);
+        return const Res(null);
+      } catch (e, s) {
+        log("$e\n$s", "Network", LogLevel.error);
+        return Res.error(e.toString());
+      }
     };
   }
 

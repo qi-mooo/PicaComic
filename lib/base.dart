@@ -639,6 +639,12 @@ class Appdata {
       if (settings[13].isEmpty) {
         settings[13] = "0";
       }
+
+      // 内置漫画源强制禁用并持久化, 确保旧版本读取同一设置文件时也是禁用状态
+      if (settings[82] != "000000") {
+        settings[82] = "000000";
+        await updateSettings(false);
+      }
     } catch (e) {
       LogManager.addLog(LogLevel.error, "Appdata.readSettings",
           "Critical error in readSettings: $e");
@@ -951,6 +957,7 @@ class _Settings {
       throw "Not Found";
     }
     appdata.settings[82] = '000000';
+    appdata.updateSettings(false);
   }
 
   List<String> get jmApiDomains => appdata.settings[85].split(',');
