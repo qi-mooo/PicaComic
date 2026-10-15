@@ -561,9 +561,6 @@ class MePage extends StatelessWidget {
       tag: "me_page_sources",
       init: SimpleController(),
       initState: (controller) {
-        if (appdata.settings[2] != "1") {
-          return;
-        }
         () async {
           var last = await appdata.readLastComicSourceCheck();
           if (last != null &&
