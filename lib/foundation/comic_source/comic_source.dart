@@ -20,6 +20,7 @@ import '../../network/base_comic.dart';
 import '../../network/nhentai_network/nhentai_main_network.dart';
 import '../../network/res.dart';
 import '../../pages/hitomi/hitomi_home_page.dart';
+import '../../pages/ehentai/accounts.dart';
 import '../../pages/ehentai/eh_script_login_page.dart';
 import '../../pages/script_login_page.dart';
 import '../../pages/settings/pikacg_leavemsg_page.dart';

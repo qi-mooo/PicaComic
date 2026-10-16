@@ -295,6 +295,7 @@ class ComicSourceParser {
         logout: () {
           JsEngine().runCode("ComicSource.sources.$key.account.logout()");
         },
+        infoItems: _parseAccountInfoItems(),
         allowReLogin: false,
       );
     }
@@ -320,6 +321,21 @@ class ComicSourceParser {
       JsEngine().runCode("ComicSource.sources.$_key.account.logout()");
     }
 
+    var infoItems = _parseAccountInfoItems();
+
+    return AccountConfig.named(
+      login: login,
+      loginWebsite: _checkExists("account.login")
+          ? _getValue("account.login.website")
+          : null,
+      registerWebsite: _getValue("account.registerWebsite"),
+      logout: logout,
+      infoItems: infoItems,
+    );
+  }
+
+  /// Parse the "account.infoItems" field of a JS comic source.
+  List<AccountInfoItem> _parseAccountInfoItems() {
     var infoItems = <AccountInfoItem>[];
     try {
       var items = _getValue("account.infoItems");
@@ -349,20 +365,12 @@ class ComicSourceParser {
     } catch (e) {
       log("Failed to parse account infoItems: $e", "Network", LogLevel.error);
     }
-
-    return AccountConfig.named(
-      login: login,
-      loginWebsite: _checkExists("account.login")
-          ? _getValue("account.login.website")
-          : null,
-      registerWebsite: _getValue("account.registerWebsite"),
-      logout: logout,
-      infoItems: infoItems,
-    );
+    return infoItems;
   }
 
   /// Parse the action of a JS account info item to an onTap callback.
-  /// Supported actions: "picacg_leave_messages", "picacg_user_comments".
+  /// Supported actions: "picacg_leave_messages", "picacg_user_comments",
+  /// "ehentai_cookie_management".
   void Function()? _parseAccountInfoAction(String? action) {
     if (action == null) {
       return null;
@@ -376,6 +384,10 @@ class ComicSourceParser {
         case "picacg_user_comments":
           App.mainNavigatorKey?.currentContext
               ?.to(() => const UserCommentsPage());
+          App.globalBack();
+        case "ehentai_cookie_management":
+          App.mainNavigatorKey?.currentContext
+              ?.to(() => const CookieManagementPage());
           App.globalBack();
       }
     };
@@ -828,7 +840,13 @@ class ComicSourceParser {
     }
     final ehPages = <String, List<List<BaseComic>>>{};
     final ehTokens = <String, List<String?>>{};
-    return SearchPageData(options, (keyword, page, searchOption) async {
+    return SearchPageData.named(
+      searchOptions: options,
+      enableTagsSuggestions: switch (_getValue("search.enableTagsSuggestions")) {
+        bool value => value,
+        _ => _key == "ehentai" || _key == "nhentai",
+      },
+      loadPage: (keyword, page, searchOption) async {
       try {
         // Check if search.load exists, otherwise use search.loadNext (Venera compatibility)
         var hasLoad = _checkExists("search.load");
