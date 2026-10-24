@@ -225,6 +225,35 @@ void main() {
     api.close();
   });
 
+  test('packaging with a progress callback does not capture CancelToken',
+      () async {
+    final cancel = CancelToken();
+    final api = client(RecordingAdapter((options, bytes) async {
+      if (options.method == 'GET') return response({'admin': true});
+      return uploaded();
+    }));
+    var progressCalls = 0;
+    final result = await uploadLibraryQueue(
+      [comic('callback')],
+      api,
+      cache,
+      cancel,
+      onProgress: (index, total, title, phase, progress) {
+        // UI callbacks retain state such as the cancellation token. That state
+        // must stay on the main isolate even while packaging reports progress.
+        expect(cancel.isCancelled, isFalse);
+        progressCalls++;
+      },
+    );
+    expect(progressCalls, greaterThan(0));
+    expect(result.uploaded, ['callback']);
+    expect(result.failed, isEmpty);
+    expect(result.stoppedReason, isNull);
+    expect(result.remaining, 0);
+    expect(cache.listSync(), isEmpty);
+    api.close();
+  });
+
   test('reader account is refused before any ZIP is packaged', () async {
     final api = client(
         RecordingAdapter((options, bytes) async => response({'admin': false})));

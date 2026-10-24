@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:archive/archive_io.dart';
 
@@ -30,6 +31,13 @@ class LibraryArchiveInput {
   final List<String> chapters;
 
   const LibraryArchiveInput(this.title, this.directory, this.chapters);
+}
+
+/// Runs the synchronous ZIP walk in a fresh isolate without capturing the
+/// upload page's callbacks, Dio client, or CancelToken.
+Future<void> createLibraryArchiveInIsolate(
+    LibraryArchiveInput input, String outputPath) {
+  return Isolate.run(() => createLibraryArchive(input, outputPath));
 }
 
 void createLibraryArchive(LibraryArchiveInput input, String outputPath) {

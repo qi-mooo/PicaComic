@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:dio/dio.dart';
 import 'package:pica_comic/network/private_library_client.dart';
@@ -35,7 +34,7 @@ Future<LibraryUploadResult> uploadLibraryQueue(
         onProgress?.call(i + 1, comics.length, title, '正在打包', null);
         temp = await cache.createTemp('private-library-');
         final archivePath = '${temp.path}/comic.zip';
-        await Isolate.run(() => createLibraryArchive(comic, archivePath));
+        await createLibraryArchiveInIsolate(comic, archivePath);
         if (cancelToken.isCancelled) throw cancelToken.cancelError!;
         onProgress?.call(i + 1, comics.length, title, '正在上传', 0);
         final uploaded = await client.upload(
