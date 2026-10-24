@@ -35,6 +35,9 @@ import 'package:pica_comic/network/picacg_network/picacg_download_model.dart';
 import 'dart:io';
 import 'package:pica_comic/utils/show_delayed_dialog.dart';
 import 'package:pica_comic/utils/translations.dart';
+import 'package:pica_comic/utils/private_library_upload.dart';
+import 'package:pica_comic/utils/private_library_archive.dart';
+import 'package:pica_comic/network/private_library_client.dart';
 import 'package:pica_comic/components/components.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 
@@ -1026,6 +1029,11 @@ class _DownloadPageState extends State<DownloadPage> {
               }
               logic.update();
             },
+          ),
+          fluent.CommandBarButton(
+            icon: const Icon(fluent.FluentIcons.upload),
+            label: Text("上传到私人漫画库".tl),
+            onPressed: () => uploadSelectedComic(context, logic),
           ),
           fluent.CommandBarButton(
             icon: const Icon(fluent.FluentIcons.more),
@@ -2083,6 +2091,11 @@ class _DownloadPageState extends State<DownloadPage> {
                     onClick: () => exportSelectedComic(context, logic),
                   ),
                   MenuEntry(
+                    icon: Icons.cloud_upload_outlined,
+                    text: "上传到私人漫画库".tl,
+                    onClick: () => uploadSelectedComic(context, logic),
+                  ),
+                  MenuEntry(
                     icon: Icons.picture_as_pdf_outlined,
                     text: "导出为pdf".tl,
                     onClick: () => exportAsPdf(null, logic),
@@ -2305,6 +2318,106 @@ class _DownloadPageState extends State<DownloadPage> {
       );
       Future<void>.delayed(
           const Duration(milliseconds: 500), () => export(logic));
+    }
+  }
+
+  bool _uploadInProgress = false;
+
+  Future<void> uploadSelectedComic(
+      BuildContext context, DownloadPageLogic logic) async {
+    if (_uploadInProgress) return;
+    final comics = <LibraryArchiveInput>[];
+    final unavailable = <String>[];
+    for (var i = 0; i < logic.selected.length; i++) {
+      if (!logic.selected[i]) continue;
+      final comic = logic.comics[i];
+      try {
+        final downloadPath = downloadManager.path;
+        if (downloadPath == null) {
+          throw const FileSystemException('下载目录尚未初始化');
+        }
+        comics.add(LibraryArchiveInput(
+          comic.name,
+          '$downloadPath/${downloadManager.getDirectory(comic.id)}',
+          List<String>.from(comic.eps),
+        ));
+      } catch (_) {
+        unavailable.add('${comic.name}：无法找到本地下载目录');
+      }
+    }
+    if (comics.isEmpty && unavailable.isEmpty) {
+      showToast(message: "请选择漫画".tl);
+      return;
+    }
+    final source = ComicSource.find('private_nas_library');
+    if (source == null || !source.isLogin) {
+      showToast(message: '请先导入私人漫画库漫画源，并在账号管理中登录');
+      return;
+    }
+    PrivateLibraryClient client;
+    try {
+      client = PrivateLibraryClient(
+        sourceUrl: source.url,
+        readToken: () => source.data['token'] as String?,
+        refreshLogin: () async {
+          final account = source.data['account'];
+          if (account is! List ||
+              account.length != 2 ||
+              source.account?.login == null) {
+            return false;
+          }
+          return source.reLogin();
+        },
+      );
+    } catch (error) {
+      showToast(message: error.toString());
+      return;
+    }
+    _uploadInProgress = true;
+    final cancelToken = CancelToken();
+    final loading = showLoadingDialog(
+      context,
+      allowCancel: true,
+      barrierDismissible: false,
+      withProgress: true,
+      cancelButtonText: '取消',
+      onCancel: () => cancelToken.cancel(),
+      message: '上传到私人漫画库：${client.base}',
+    );
+    try {
+      final result = await uploadLibraryQueue(
+          comics, client, Directory(App.cachePath), cancelToken,
+          onProgress: (index, total, title, phase, progress) {
+        loading.setProgress(progress);
+        loading.setMessage('$phase $index/$total：$title');
+      });
+      loading.close();
+      if (!mounted) return;
+      result.failed.insertAll(0, unavailable);
+      final lines = <String>[
+        '已上传 ${result.uploaded.length} 部，跳过 ${result.skipped.length} 部，失败 ${result.failed.length} 部。',
+        if (result.stoppedReason != null) result.stoppedReason!,
+        if (result.remaining > 0) '还有 ${result.remaining} 部未完成。',
+        if (result.skipped.isNotEmpty) '\n重名跳过：\n${result.skipped.join('\n')}',
+        if (result.failed.isNotEmpty) '\n失败详情：\n${result.failed.join('\n')}',
+      ];
+      await showDialog<void>(
+        context: this.context,
+        builder: (context) => ContentDialog(
+          title: '上传结果',
+          content: SelectableText(lines.join('\n')).paddingHorizontal(16),
+          actions: [
+            Button.filled(
+              onPressed: () => Navigator.pop(context),
+              child: Text('确定'.tl),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      loading.close();
+      client.close();
+      _uploadInProgress = false;
     }
   }
 
