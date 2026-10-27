@@ -1,7 +1,5 @@
 library pica_reader;
 
-import 'package:liquid_glass_widgets/widgets/shared/adaptive_liquid_glass_layer.dart';
-import 'package:pica_comic/utils/show_delayed_dialog.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:battery_plus/battery_plus.dart';
@@ -44,7 +42,6 @@ import 'package:pica_comic/utils/time.dart';
 import 'package:pica_comic/network/jm_network/jm_network.dart';
 import '../../foundation/app.dart';
 import '../../foundation/platform_utils.dart';
-import '../../foundation/ui_mode.dart';
 import '../../network/hitomi_network/hitomi_models.dart';
 import '../../utils/extensions.dart';
 import '../../utils/key_down_event.dart';
@@ -55,7 +52,6 @@ import '../../utils/ohos_device_info.dart';
 import 'package:pica_comic/network/picacg_network/methods.dart' as picacg;
 import 'package:pica_comic/utils/translations.dart';
 
-import '../jm/jm_comments_page.dart';
 import 'package:pica_comic/network/cloudflare.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
@@ -243,7 +239,8 @@ class ComicReadingPage extends StatelessWidget {
 
   _updateHistory(ComicReadingPageLogic? logic, bool updateMePage) {
     if (readingData.hasEp) {
-      if (logic!.order == 1 && logic.index == 1) {
+      history.readEpisode.add(logic!.order);
+      if (logic.order == 1 && logic.index == 1) {
         history.ep = 0;
         history.page = 0;
       } else {
@@ -325,6 +322,7 @@ class ComicReadingPage extends StatelessWidget {
       OhosDecorBridge.holdDecorDark(this);
       if (useDarkBackground) {}
     }, dispose: (logic) {
+      logic.resetContinuousState();
       //清除缓存并减小最大缓存
       BaseImageProvider.clearCache();
       BaseImageProvider.setCacheSizeLimit(50 * 1024 * 1024);
@@ -384,14 +382,6 @@ class ComicReadingPage extends StatelessWidget {
               child: CircularProgressIndicator(),
             );
           } else if (logic.urls.isNotEmpty) {
-            if (logic.readingMethod == ReadingMethod.topToBottomContinuously &&
-                !logic.haveUsedInitialPage &&
-                initialPage != 0) {
-              Future.microtask(() {
-                logic.jumpToPage(initialPage);
-                logic.haveUsedInitialPage = true;
-              });
-            }
             //监听音量键
             if (appdata.settings[7] == "1") {
               if (logic.listenVolume == null) {
@@ -431,7 +421,7 @@ class ComicReadingPage extends StatelessWidget {
                       right: 0,
                       child: IgnorePointer(
                         child: ColoredBox(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                         ),
                       ),
                     ),
@@ -632,6 +622,10 @@ class ComicReadingPage extends StatelessWidget {
   }
 
   void loadInfo(ComicReadingPageLogic logic) async {
+    if (logic.isContinuousMode) {
+      await logic.startContinuousLoading();
+      return;
+    }
     logic.urls = [];
     var res = await readingData.loadEp(logic.order);
     if (res.error) {
@@ -661,50 +655,47 @@ class ComicReadingPage extends StatelessWidget {
   /// Used when [ComicReadingPageLogic.readingMethod] is [ReadingMethod.topToBottomContinuously].
   ///
   /// Select a image form screen, to share or download
-  Future<int?> selectImage() async {
-    var logic = StateController.find<ComicReadingPageLogic>();
-    var items = logic.itemScrollListener.itemPositions.value
-        .where((item) => item.index < logic.urls.length)
+  Future<ContinuousImageItem?> selectImage() async {
+    final logic = StateController.find<ComicReadingPageLogic>();
+    // Snapshot chapter and URL as well as page, so scrolling while the chooser
+    // is open cannot change which image is shared or saved.
+    final items = logic.visibleContinuousPositions
+        .map((position) => logic.continuousItems[position.index])
         .toList();
-    if (items.isEmpty) {
-      return null;
-    }
-    if (items.length == 1) {
-      return items[0].index;
-    }
-    int? res;
-    await showDialog(
+    if (items.isEmpty) return null;
+    if (items.length == 1) return items.single;
+    return showDialog<ContinuousImageItem>(
         context: App.globalContext!,
         builder: (context) {
           return SimpleDialog(
             title: Text("选择屏幕上的图片".tl),
             children: [
               ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: 400,
-                ),
+                constraints: const BoxConstraints(maxWidth: 400),
                 child: Column(
                   children: [
-                    for (var item in items)
+                    for (final item in items)
                       ListTile(
-                        title: Text((item.index + 1).toString()),
-                        onTap: () {
-                          res = item.index;
-                          App.globalBack();
-                        },
+                        title: Text(readingData.hasEp
+                            ? "${readingData.eps?.values.elementAtOrNull(item.chapter - 1) ?? item.chapter} · ${item.page + 1}"
+                            : (item.page + 1).toString()),
+                        onTap: () => Navigator.of(context).pop(item),
                         trailing: const Icon(Icons.arrow_right),
-                      )
+                      ),
                   ],
                 ),
-              )
+              ),
             ],
           );
         });
-    return res;
   }
 
   String getImageKey(int index) {
     var logic = StateController.find<ComicReadingPageLogic>();
+    if (logic.isContinuousMode) {
+      final item = logic.continuousItems[index];
+      return readingData.buildImageKey(item.chapter, item.page, item.url);
+    }
     if (type == ComicType.ehentai) {
       return "${readingData.id}${index + 1}";
     }
@@ -722,51 +713,32 @@ class ComicReadingPage extends StatelessWidget {
     throw "failed";
   }
 
+  Future<File?> _currentImageFile() async {
+    final logic = StateController.find<ComicReadingPageLogic>();
+    ContinuousImageItem? item;
+    if (logic.isContinuousMode) {
+      item = await selectImage();
+    } else if (logic.index >= 1 && logic.index <= logic.urls.length) {
+      item = ContinuousImageItem(
+          logic.order, logic.index - 1, logic.urls[logic.index - 1]);
+    }
+    if (item == null) return null;
+    return _getFileFromStream(
+        readingData.loadImage(item.chapter, item.page, item.url));
+  }
+
   void share() async {
-    var logic = StateController.find<ComicReadingPageLogic>();
-    int? index = logic.index - 1;
-    if (logic.readingMethod == ReadingMethod.topToBottomContinuously) {
-      index = await selectImage();
-    }
-    if (index == null) {
-      return;
-    }
-
-    var file = await _getFileFromStream(
-        readingData.loadImage(logic.order, index, logic.urls[index]));
-
-    shareImage(file);
+    final file = await _currentImageFile();
+    if (file != null) shareImage(file);
   }
 
   Future<String?> _persistentCurrentImage() async {
-    var logic = StateController.find<ComicReadingPageLogic>();
-    int? index = logic.index - 1;
-    if (logic.readingMethod == ReadingMethod.topToBottomContinuously) {
-      index = await selectImage();
-    }
-    if (index == null) {
-      return null;
-    }
-
-    var file = await _getFileFromStream(
-        readingData.loadImage(logic.order, index, logic.urls[index]));
-
-    return persistentCurrentImage(file);
+    final file = await _currentImageFile();
+    return file == null ? null : persistentCurrentImage(file);
   }
 
   void saveCurrentImage() async {
-    var logic = StateController.find<ComicReadingPageLogic>();
-    int? index = logic.index - 1;
-    if (logic.readingMethod == ReadingMethod.topToBottomContinuously) {
-      index = await selectImage();
-    }
-    if (index == null) {
-      return;
-    }
-
-    var file = await _getFileFromStream(
-        readingData.loadImage(logic.order, index, logic.urls[index]));
-
-    saveImage(file);
+    final file = await _currentImageFile();
+    if (file != null) saveImage(file);
   }
 }

@@ -51,10 +51,15 @@ class _ReadingSettingsState extends State<ReadingSettings> {
 
   void setValue(int newValue) {
     App.globalBack();
+    final wasContinuous = value == 4;
     value = newValue;
     appdata.settings[9] = value.toString();
     appdata.writeData();
     var logic = StateController.find<ComicReadingPageLogic>();
+    if (wasContinuous || newValue == 4) {
+      logic.refresh_();
+      return;
+    }
     logic.tools = false;
     logic.showSettings = false;
     logic.index = 1;

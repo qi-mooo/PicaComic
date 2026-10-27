@@ -55,9 +55,9 @@ class ScrollManager {
   /// handle pointer move event
   void addOffset(Offset value) {
     if (logic.photoViewController.scale == 1) {
-      // 未放大时列表自身负责滚动, 到达章节边界后继续拖动则直接切章。
+      // 未放大时由列表滚动；下一章追加到列表末尾，不跳走当前图片。
       if (value.dy < 0 && logic.isAtChapterEnd) {
-        logic.jumpToNextChapter();
+        logic.prefetchNextContinuousChapter();
       } else if (value.dy > 0 && logic.isAtChapterStart) {
         logic.jumpToLastChapter();
       }
