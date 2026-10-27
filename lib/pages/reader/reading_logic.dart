@@ -82,6 +82,12 @@ class ComicReadingPageLogic extends StateController {
   bool get isContinuousMode =>
       readingMethod == ReadingMethod.topToBottomContinuously;
 
+  /// Whether continuous reading should append the next chapter in the same
+  /// list instead of showing the chapter transition page.
+  bool get isSeamlessContinuousMode =>
+      isContinuousMode &&
+      appdata.getReaderSetting(data.id, data.sourceKey, 105) == "1";
+
   /// 是否已滚动到本章开头(带 2px 容差, 避免浮点严格相等判断失效)
   bool get isAtScrollStart =>
       scrollController.hasClients &&
@@ -153,8 +159,9 @@ class ComicReadingPageLogic extends StateController {
     if (positions.isEmpty) return;
     _setContinuousPosition(continuousItems[positions.first.index]);
     // Keep one chapter ahead, even when two short chapters share the viewport.
-    if (continuousItems[positions.last.index].chapter ==
-        continuousItems.last.chapter) {
+    if (isSeamlessContinuousMode &&
+        continuousItems[positions.last.index].chapter ==
+            continuousItems.last.chapter) {
       prefetchNextContinuousChapter();
     }
   }
@@ -295,11 +302,22 @@ class ComicReadingPageLogic extends StateController {
       ReadingMethod.values[int.parse(appdata.settings[9]) - 1];
 
   void jumpToNextPage() {
-    if (isContinuousMode) {
+    if (isSeamlessContinuousMode) {
       if (!scrollController.hasClients) return;
       if (isAtChapterEnd) {
         prefetchNextContinuousChapter();
       }
+      scrollController.jumpTo((scrollController.position.pixels + 600).clamp(
+          scrollController.position.minScrollExtent,
+          scrollController.position.maxScrollExtent));
+      return;
+    }
+    if (isContinuousMode && isAtChapterEnd) {
+      jumpToNextChapter();
+      return;
+    }
+    if (isContinuousMode) {
+      if (!scrollController.hasClients) return;
       scrollController.jumpTo((scrollController.position.pixels + 600).clamp(
           scrollController.position.minScrollExtent,
           scrollController.position.maxScrollExtent));
@@ -313,12 +331,23 @@ class ComicReadingPageLogic extends StateController {
   }
 
   void jumpToLastPage() {
-    if (isContinuousMode) {
+    if (isSeamlessContinuousMode) {
       if (!scrollController.hasClients) return;
       if (isAtChapterStart) {
         jumpToLastChapter();
         return;
       }
+      scrollController.jumpTo((scrollController.position.pixels - 600).clamp(
+          scrollController.position.minScrollExtent,
+          scrollController.position.maxScrollExtent));
+      return;
+    }
+    if (isContinuousMode && isAtChapterStart) {
+      jumpToLastChapter();
+      return;
+    }
+    if (isContinuousMode) {
+      if (!scrollController.hasClients) return;
       scrollController.jumpTo((scrollController.position.pixels - 600).clamp(
           scrollController.position.minScrollExtent,
           scrollController.position.maxScrollExtent));
@@ -380,7 +409,7 @@ class ComicReadingPageLogic extends StateController {
       }
       return;
     }
-    if (isContinuousMode) {
+    if (isSeamlessContinuousMode) {
       unawaited(_jumpToContinuousChapter(order + 1));
       return;
     }
@@ -424,7 +453,7 @@ class ComicReadingPageLogic extends StateController {
       return;
     }
 
-    if (isContinuousMode) {
+    if (isSeamlessContinuousMode) {
       unawaited(_jumpToContinuousChapter(order - 1));
       return;
     }
@@ -436,6 +465,7 @@ class ComicReadingPageLogic extends StateController {
     pageController = _createPageController(1);
     index = 1;
     requestedLoadingItems = [];
+    resetContinuousState();
     clearPhotoViewControllers();
     update();
   }
@@ -586,7 +616,9 @@ class ComicReadingPageLogic extends StateController {
     errorMessage = null;
     isLoading = false;
     update();
-    prefetchNextContinuousChapter();
+    if (isSeamlessContinuousMode) {
+      prefetchNextContinuousChapter();
+    }
   }
 
   Future<void> _jumpToContinuousChapter(int chapter) async {

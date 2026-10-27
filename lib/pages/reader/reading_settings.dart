@@ -179,6 +179,32 @@ class _ReadingSettingsState extends State<ReadingSettings> {
             ),
           ),
         ),
+        if (appdata.getReaderSetting(isEnabledSpecificSettings ? comicId : null,
+                isEnabledSpecificSettings ? sourceKey : null, 9) ==
+            "4")
+          SliverToBoxAdapter(
+            child: SwitchListTile(
+              title: Text("连续阅读无缝衔接下一章".tl),
+              subtitle: Text("关闭后在章节末尾显示下一章提示".tl),
+              value: appdata.getReaderSetting(
+                    isEnabledSpecificSettings ? comicId : null,
+                    isEnabledSpecificSettings ? sourceKey : null,
+                    105,
+                  ) ==
+                  "1",
+              onChanged: (b) {
+                appdata.setReaderSetting(
+                  isEnabledSpecificSettings ? comicId : null,
+                  isEnabledSpecificSettings ? sourceKey : null,
+                  105,
+                  b ? "1" : "0",
+                );
+                appdata.updateSettings();
+                setState(() {});
+                logic.refresh_();
+              },
+            ),
+          ),
         // 首页显示单张图片（双页模式）
         if (appdata.getReaderSetting(
                   isEnabledSpecificSettings ? comicId : null,

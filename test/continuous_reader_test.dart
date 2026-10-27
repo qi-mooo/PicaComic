@@ -32,6 +32,8 @@ class TestReadingData extends ReadingData {
   String get id => 'test';
   @override
   ComicType get type => ComicType.other;
+  @override
+  String get sourceKey => 'test';
 
   @override
   Future<Res<List<String>>> loadEp(int ep) async {
@@ -72,6 +74,7 @@ void main() {
 
   setUp(() {
     appdata.settings[9] = '4';
+    appdata.settings[105] = '1';
     appdata.settings[28] = '2';
     data = TestReadingData();
     history = [];
@@ -81,6 +84,7 @@ void main() {
   });
 
   tearDown(() {
+    appdata.settings[105] = '1';
     logic.resetContinuousState();
     logic.pageController.dispose();
     logic.scrollController.dispose();
@@ -88,6 +92,22 @@ void main() {
     logic.clearPhotoViewControllers();
     StateController.remove<ComicReadingPageLogic>();
     ComicImage.clear();
+  });
+
+  test(
+      'the seamless option can be disabled without preloading the next chapter',
+      () async {
+    appdata.settings[105] = '0';
+    await logic.startContinuousLoading();
+    await flushLoads();
+    expect(logic.isSeamlessContinuousMode, isFalse);
+    expect(data.calls, [1]);
+    expect(logic.continuousItems.map((item) => item.chapter), [1, 1, 1]);
+    logic.jumpToNextChapter();
+    expect((logic.order, logic.isLoading), (2, true));
+    await logic.startContinuousLoading();
+    expect(data.calls, [1, 2]);
+    expect(logic.continuousItems.map((item) => item.chapter), [2, 2, 2]);
   });
 
   test('preloads one chapter, deduplicates requests, and follows visible pages',

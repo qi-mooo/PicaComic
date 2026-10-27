@@ -27,13 +27,17 @@ extension ImageExt on ComicReadingPage {
       ComicReadingPageLogic logic, BuildContext context, String target) {
     ScrollExtension.futurePosition = null;
     Widget buildType4() {
+      final showSeamlessStatus =
+          logic.isSeamlessContinuousMode && logic.nextContinuousChapter != null;
+      final showChapterTransitionPage = !logic.isSeamlessContinuousMode &&
+          _shouldShowChapterTransitionPage(logic);
       return ScrollablePositionedList.builder(
         itemScrollController: logic.itemScrollController,
         itemPositionsListener: logic.itemScrollListener,
         initialScrollIndex: logic.continuousItemIndex
             .clamp(0, logic.continuousItems.length - 1),
         itemCount: logic.continuousItems.length +
-            (logic.nextContinuousChapter == null ? 0 : 1),
+            ((showSeamlessStatus || showChapterTransitionPage) ? 1 : 0),
         addSemanticIndexes: false,
         scrollController: logic.scrollController,
         scrollBehavior: const MaterialScrollBehavior()
@@ -43,7 +47,7 @@ extension ImageExt on ComicReadingPage {
             : const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics()),
         itemBuilder: (context, index) {
-          if (index == logic.continuousItems.length) {
+          if (showSeamlessStatus && index == logic.continuousItems.length) {
             final error = logic.nextContinuousChapterError;
             return Padding(
               key: const ValueKey('continuous-chapter-status'),
@@ -68,6 +72,18 @@ extension ImageExt on ComicReadingPage {
                         ],
                       ),
               ),
+            );
+          }
+          if (showChapterTransitionPage &&
+              index == logic.continuousItems.length) {
+            return _ChapterTransitionPage(
+              comicTitle: readingData.title,
+              currentChapterTitle:
+                  readingData.eps?.values.elementAtOrNull(logic.order - 1) ??
+                      "",
+              nextChapterTitle:
+                  readingData.eps?.values.elementAtOrNull(logic.order) ?? "",
+              useDarkBackground: useDarkBackground,
             );
           }
 
@@ -389,7 +405,9 @@ extension ImageExt on ComicReadingPage {
               : logic.jumpToLastPage();
         } else {
           if (pointerSignal.scrollDelta.dy > 0 && logic.isAtChapterEnd) {
-            logic.prefetchNextContinuousChapter();
+            logic.isSeamlessContinuousMode
+                ? logic.prefetchNextContinuousChapter()
+                : logic.jumpToNextChapter();
             return;
           }
           if (pointerSignal.scrollDelta.dy < 0 && logic.isAtChapterStart) {
@@ -421,7 +439,9 @@ extension ImageExt on ComicReadingPage {
               logic.readingMethod == ReadingMethod.topToBottomContinuously) {
             if (event.scale == 1.0) {
               if (event.panDelta.dy < 0 && logic.isAtChapterEnd) {
-                logic.prefetchNextContinuousChapter();
+                logic.isSeamlessContinuousMode
+                    ? logic.prefetchNextContinuousChapter()
+                    : logic.jumpToNextChapter();
                 return;
               }
               if (event.panDelta.dy > 0 && logic.isAtChapterStart) {
@@ -558,5 +578,58 @@ extension ImageExt on ComicReadingPage {
       return false;
     }
     return true;
+  }
+
+  bool _shouldShowChapterTransitionPage(ComicReadingPageLogic logic) {
+    return readingData.hasEp &&
+        readingData.eps != null &&
+        logic.order < readingData.eps!.length;
+  }
+}
+
+class _ChapterTransitionPage extends StatelessWidget {
+  const _ChapterTransitionPage({
+    required this.comicTitle,
+    required this.currentChapterTitle,
+    required this.nextChapterTitle,
+    required this.useDarkBackground,
+  });
+
+  final String comicTitle;
+  final String currentChapterTitle;
+  final String nextChapterTitle;
+  final bool useDarkBackground;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final textColor = useDarkBackground ? Colors.white : null;
+    return Container(
+      width: size.width,
+      height: size.height,
+      color: useDarkBackground
+          ? Colors.black
+          : Theme.of(context).colorScheme.surface,
+      padding: EdgeInsets.only(
+        left: 32,
+        right: 32,
+        top: size.height * 0.22,
+        bottom: size.height * 0.14,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("已读完:".tl, style: TextStyle(fontSize: 24, color: textColor)),
+          const SizedBox(height: 20),
+          Text("$currentChapterTitle $comicTitle",
+              style: TextStyle(fontSize: 28, color: textColor, height: 1.35)),
+          SizedBox(height: size.height * 0.13),
+          Text("下一章:".tl, style: TextStyle(fontSize: 24, color: textColor)),
+          const SizedBox(height: 20),
+          Text(nextChapterTitle,
+              style: TextStyle(fontSize: 28, color: textColor, height: 1.35)),
+        ],
+      ),
+    );
   }
 }

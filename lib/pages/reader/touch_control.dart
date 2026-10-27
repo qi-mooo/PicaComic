@@ -57,7 +57,9 @@ class ScrollManager {
     if (logic.photoViewController.scale == 1) {
       // 未放大时由列表滚动；下一章追加到列表末尾，不跳走当前图片。
       if (value.dy < 0 && logic.isAtChapterEnd) {
-        logic.prefetchNextContinuousChapter();
+        logic.isSeamlessContinuousMode
+            ? logic.prefetchNextContinuousChapter()
+            : logic.jumpToNextChapter();
       } else if (value.dy > 0 && logic.isAtChapterStart) {
         logic.jumpToLastChapter();
       }

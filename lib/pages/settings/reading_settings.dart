@@ -38,6 +38,13 @@ class _ReadingSettingsState extends State<ReadingSettings> {
             appdata.updateSettings();
           },
         ),
+        if (appdata.settings[9] == "4")
+          SwitchSetting(
+            title: "连续阅读无缝衔接下一章".tl,
+            subTitle: "关闭后在章节末尾显示下一章提示".tl,
+            settingsIndex: 105,
+            icon: const Icon(Icons.next_plan_outlined),
+          ),
         SwitchSetting(
           title: "点按翻页".tl,
           settingsIndex: 0,

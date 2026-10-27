@@ -725,7 +725,9 @@
     "每日自动签到": "每日自動簽到",
     "此功能已不再受支持": "此功能已不再受支援",
     "文件夹已关联到 @source": "資料夾已關聯到 @source",
-    "请勿反馈相关问题": "請勿回饋相關問題"
+    "请勿反馈相关问题": "請勿回饋相關問題",
+    "连续阅读无缝衔接下一章": "連續閱讀無縫銜接下一章",
+    "关闭后在章节末尾显示下一章提示": "關閉後在章節末尾顯示下一章提示"
   },
   "en_US": {
     "有可用更新": "Updates available",
@@ -1457,6 +1459,8 @@
     "楼": "Floor",
     "输入页码": "Enter page number",
     "页码无效": "Invalid page number",
-    "请勿反馈相关问题": "Please DO NOT report related issues"
+    "请勿反馈相关问题": "Please DO NOT report related issues",
+    "连续阅读无缝衔接下一章": "Seamlessly continue to the next chapter",
+    "关闭后在章节末尾显示下一章提示": "Show a next chapter prompt at the end when disabled"
   }
 }
